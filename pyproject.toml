@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "payable-receipt-ocr"
+version = "0.1.0a1"
+description = "Local, payment-aware receipt OCR with evidence grades and mandatory confirmation"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "FireBird1998" }]
+keywords = ["ocr", "receipt", "tesseract", "expense", "offline", "privacy"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Graphics :: Capture :: Scanners",
+  "Topic :: Scientific/Engineering :: Image Processing",
+]
+dependencies = [
+  "numpy>=1.24,<3",
+  "opencv-python-headless>=4.9,<5",
+  "Pillow>=10,<13",
+  "pytesseract>=0.3.13,<0.4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2,<2",
+  "pytest>=8.3,<9",
+  "ruff>=0.12,<1",
+  "twine>=6,<7",
+]
+
+[project.scripts]
+payable-receipt-ocr = "payable_receipt_ocr.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/FireBird1998/payable-receipt-ocr"
+Documentation = "https://firebird1998.github.io/payable-receipt-ocr/"
+Issues = "https://github.com/FireBird1998/payable-receipt-ocr/issues"
+Source = "https://github.com/FireBird1998/payable-receipt-ocr"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+markers = ["integration: requires a local Tesseract executable"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[tool.ruff.format]
+quote-style = "double"

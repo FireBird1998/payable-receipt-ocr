@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Printable quick reference for the receipt OCR stack."
+    />
+    <link rel="icon" href="data:," />
+    <title>Reference · Receipt OCR stack map</title>
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <div class="reference-header">
+          <div>
+            <p class="eyebrow">Quick reference · printable</p>
+            <h1>Receipt OCR stack map</h1>
+            <p class="lede">
+              The compressed package architecture: what runs today, what every
+              technology owns, and where an optional application adapter
+              connects.
+            </p>
+          </div>
+          <div class="meta" style="margin-top: 0">
+            <a class="pill" href="pipeline-report.html">Full report</a>
+            <a class="pill" href="learning-lab.html">Return to learning lab</a>
+          </div>
+        </div>
+      </header>
+
+      <section class="section">
+        <p class="eyebrow">One-sentence model</p>
+        <div class="callout">
+          Pillow and OpenCV prepare the image; Tesseract reads text; Python
+          ranks payment candidates; evidence gates the suggestion; a human
+          confirms; only the calling application may persist it.
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Current architecture</p>
+        <h2>One deep module, one consumer-owned decision</h2>
+        <div class="grid-2">
+          <article class="card stack-card">
+            <h3>Public interface · caller runtime</h3>
+            <ul class="mini-list">
+              <li>
+                <strong>Function:</strong>
+                <code>recognize(image, currency=...)</code>
+              </li>
+              <li>
+                <strong>Result:</strong> typed total, currency, grade, warnings
+              </li>
+              <li>
+                <strong>Guard:</strong> <code>requires_confirmation</code> is
+                always true
+              </li>
+              <li><strong>Privacy:</strong> diagnostics excluded by default</li>
+              <li>
+                <strong>Side effects:</strong> no network and no persistence
+              </li>
+              <li>
+                <strong>Adapter:</strong> CLI included; HTTP left to the caller
+              </li>
+            </ul>
+          </article>
+          <article class="card stack-card ocr">
+            <h3>Implementation · Python runtime</h3>
+            <ul class="mini-list">
+              <li><strong>File handling:</strong> Pillow</li>
+              <li><strong>Pixels:</strong> NumPy + OpenCV headless</li>
+              <li><strong>Recognition:</strong> Tesseract 5 + tessdata_fast</li>
+              <li><strong>Bridge:</strong> pytesseract</li>
+              <li>
+                <strong>Interpretation:</strong> regex, Unicode normalization,
+                Decimal
+              </li>
+              <li><strong>Output:</strong> evidence-rich internal result</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Pipeline</p>
+        <h2>Six transformations</h2>
+        <div class="card" style="overflow-x: auto">
+          <table class="code-map">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Owner</th>
+                <th>Input → output</th>
+                <th>Failure it addresses</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>Pillow</td>
+                <td>file → oriented RGB image</td>
+                <td>rotated phone screenshots</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>OpenCV</td>
+                <td>image → grayscale + threshold views</td>
+                <td>skew, contrast, dark UI</td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>Tesseract</td>
+                <td>pixels → text, boxes, confidence</td>
+                <td>visible text recognition</td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>Python rules</td>
+                <td>text → money candidates</td>
+                <td>saving/subtotal confusion</td>
+              </tr>
+              <tr>
+                <td>5</td>
+                <td>Evidence gate</td>
+                <td>candidates → suggestion + grade</td>
+                <td>unsafe certainty</td>
+              </tr>
+              <tr>
+                <td>6</td>
+                <td>Benchmark</td>
+                <td>labeled corpus → readiness result</td>
+                <td>anecdotal success</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="equation" style="margin-top: 14px">
+          2 variants × 2 languages × 3 PSM layouts = 12 OCR passes
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Meaning hierarchy</p>
+        <h2>How the parser thinks about totals</h2>
+        <div class="grid-3">
+          <article class="card">
+            <h3 style="color: var(--mint)">Payment labels</h3>
+            <p>Amount Paid, Paid by You, To Pay, Grand Total, Amount Due</p>
+          </article>
+          <article class="card">
+            <h3 style="color: var(--amber)">Fallback totals</h3>
+            <p>
+              Total Bill Amount, Item Total &amp; GST, MRP Total, generic Total
+            </p>
+          </article>
+          <article class="card">
+            <h3 style="color: var(--coral)">Negative evidence</h3>
+            <p>Total Savings, discount, cashback, tendered cash, change</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Safety contract</p>
+        <h2>What output means</h2>
+        <div class="grid-3">
+          <article class="card">
+            <h3>strong</h3>
+            <p>
+              Independent evidence agrees and competitors are safely behind.
+              Still confirm.
+            </p>
+          </article>
+          <article class="card">
+            <h3>review</h3>
+            <p>
+              A plausible suggestion exists, but evidence or competition is
+              ambiguous. Confirm carefully.
+            </p>
+          </article>
+          <article class="card">
+            <h3>none</h3>
+            <p>
+              No acceptable payment/fallback candidate was found. Enter the
+              value manually.
+            </p>
+          </article>
+        </div>
+        <aside class="callout" style="margin-top: 16px">
+          In every case: <code>requires_confirmation: true</code>. Confidence
+          grades never grant write permission.
+        </aside>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Benchmark gate</p>
+        <h2>Readiness is a conjunction</h2>
+        <div class="equation">
+          authorized ≥ 30 AND each app ≥ 10 AND exact ≥ 90% AND false-strong = 0
+          AND confirmation = 100%
+        </div>
+        <p class="section-intro">
+          The tuned public 35-image corpus reached 35/35, but it is in-sample
+          exploratory evidence. The formal gate remains blocked until fresh
+          authorized screenshots are labeled and tested.
+        </p>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Integration boundary</p>
+        <h2>Future request path</h2>
+        <div class="card">
+          <p class="mono">
+            authorized image<br />
+            → application or optional HTTP adapter<br />
+            → payable-receipt-ocr <code>recognize(...)</code><br />
+            → { total, currency, grade, warnings, requires_confirmation }<br />
+            → user edits or confirms<br />
+            → caller validates the confirmed value<br />
+            → caller-owned persistence
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Primary sources</p>
+        <div class="card">
+          <ul class="mini-list">
+            <li>
+              <a href="https://tesseract-ocr.github.io/tessdoc/"
+                >Tesseract 5 User Manual</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/madmaze/pytesseract"
+                >pytesseract project</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://docs.opencv.org/4.x/d7/d4d/tutorial_py_thresholding.html"
+                >OpenCV thresholding</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://pillow.readthedocs.io/en/stable/reference/ImageOps.html"
+                >Pillow ImageOps</a
+              >
+            </li>
+            <li>
+              <a href="https://docs.python.org/3/library/decimal.html"
+                >Python Decimal</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/FireBird1998/payable-receipt-ocr#readme"
+                >Package README</a
+              >
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

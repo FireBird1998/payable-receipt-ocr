@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Detailed technical and product-safety report for the receipt OCR v4 pipeline."
+    />
+    <link rel="icon" href="data:," />
+    <title>Report · payable-receipt-ocr pipeline</title>
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <div class="reference-header">
+          <div>
+            <p class="eyebrow">Technical report · alpha package</p>
+            <h1>payable-receipt-ocr pipeline</h1>
+            <p class="lede">
+              How the local Blinkit, Swiggy, and Zepto recognizer transforms a
+              screenshot into a confirmation-only total suggestion—and what
+              remains before it can become an expense-app service.
+            </p>
+          </div>
+          <div class="meta" style="margin-top: 0">
+            <a class="pill" href="learning-lab.html">Learning lab</a>
+            <a class="pill" href="stack-map.html">Stack map</a>
+          </div>
+        </div>
+        <nav class="report-toc" aria-label="Report sections">
+          <a href="#summary">Executive summary</a>
+          <a href="#boundary">System boundary</a>
+          <a href="#pipeline">Pipeline stages</a>
+          <a href="#decision">Decision logic</a>
+          <a href="#contract">Output contract</a>
+          <a href="#evidence">Benchmark evidence</a>
+          <a href="#risk">Risks and limits</a>
+          <a href="#roadmap">Recommended path</a>
+        </nav>
+      </header>
+
+      <section class="section" id="summary">
+        <p class="eyebrow">1 · Executive summary</p>
+        <h2>The approach is viable; the product decision is still gated</h2>
+        <div class="decision-box">
+          <h3>Current verdict</h3>
+          <p>
+            The alpha package preserves the free, local, payment-aware v4 OCR
+            pipeline. Its tuned 35-image exploratory corpus produced 35 exact
+            total-and-currency matches, zero wrong results graded strong, and
+            zero confirmation violations. This proves the parsing strategy is
+            worth continuing.
+          </p>
+          <p style="margin-bottom: 0">
+            It does <strong>not</strong> prove production accuracy. The same
+            public corpus informed tuning, and none of those images can satisfy
+            the authorized holdout gate. A fresh private benchmark remains the
+            next decision point.
+          </p>
+        </div>
+
+        <div class="report-metrics" aria-label="Pipeline status metrics">
+          <div class="report-metric good">
+            <span>Exploratory exact</span><strong>35 / 35</strong>
+          </div>
+          <div class="report-metric good">
+            <span>False strong</span><strong>0</strong>
+          </div>
+          <div class="report-metric good">
+            <span>Confirmation</span><strong>35 / 35</strong>
+          </div>
+          <div class="report-metric blocked">
+            <span>Formal gate</span><strong>BLOCKED</strong>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px">
+          <div class="status-line">
+            <span class="status-label current">Current</span>
+            <div>
+              The Python interface and CLI accept one local image and emit a
+              confirmation-only result.
+            </div>
+          </div>
+          <div class="status-line">
+            <span class="status-label current">Current</span>
+            <div>
+              English and Devanagari Tesseract passes run locally; no receipt is
+              uploaded to a cloud OCR API.
+            </div>
+          </div>
+          <div class="status-line">
+            <span class="status-label blocked">Blocked</span>
+            <div>
+              The authorized 30-screenshot holdout corpus is not yet populated.
+            </div>
+          </div>
+          <div class="status-line">
+            <span class="status-label proposed">Proposed</span>
+            <div>
+              An application may place an authenticated HTTP adapter in front of
+              the package after the quality gate passes.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="boundary">
+        <p class="eyebrow">2 · System boundary</p>
+        <h2>The OCR package and consuming application are separate modules</h2>
+        <p class="section-intro">
+          This distinction is essential. The Python package has no HTTP server,
+          application authentication, database connection, or permission to
+          create expenses. It reads a local file and produces evidence. The
+          consuming application owns users, validation, review, and persistence.
+        </p>
+
+        <div class="grid-2">
+          <article class="card stack-card">
+            <p class="eyebrow">Consuming application · caller-owned runtime</p>
+            <h3>System of record</h3>
+            <ul class="mini-list">
+              <li>
+                <strong>Input:</strong> authorized image and currency context
+              </li>
+              <li>
+                <strong>Review:</strong> user edits or confirms the suggestion
+              </li>
+              <li>
+                <strong>Guards:</strong> caller-owned authentication and
+                validation
+              </li>
+              <li><strong>Persistence:</strong> caller-owned database</li>
+              <li>
+                <strong>Responsibility:</strong> authorized expense creation and
+                updates
+              </li>
+            </ul>
+          </article>
+          <article class="card stack-card ocr">
+            <p class="eyebrow">Current package · Python runtime</p>
+            <h3>Evidence-producing recognizer</h3>
+            <ul class="mini-list">
+              <li><strong>File handling:</strong> Pillow</li>
+              <li>
+                <strong>Pixel processing:</strong> NumPy and OpenCV headless
+              </li>
+              <li>
+                <strong>Recognition:</strong> Tesseract 5 through pytesseract
+              </li>
+              <li>
+                <strong>Interpretation:</strong> Python regex, Unicode
+                normalization, Decimal
+              </li>
+              <li>
+                <strong>Responsibility:</strong> suggest a total, never persist
+                an expense
+              </li>
+            </ul>
+          </article>
+        </div>
+
+        <aside class="callout" style="margin-top: 16px">
+          <strong>AI clarification:</strong> no paid or cloud generative-AI API
+          is used. Tesseract is free and open source, but its modern OCR engine
+          uses an LSTM neural network. “Local OCR” is the accurate description.
+          <a href="https://tesseract-ocr.github.io/tessdoc/"
+            >Official Tesseract manual</a
+          >
+        </aside>
+
+        <div class="grid-2" style="margin-top: 16px">
+          <article class="card">
+            <p class="eyebrow">Request path that exists now</p>
+            <p class="mono">
+              local image → recognize(...) → Tesseract subprocesses → typed
+              suggestion
+            </p>
+          </article>
+          <article class="card">
+            <p class="eyebrow">Proposed path after holdout</p>
+            <p class="mono">
+              application → optional HTTP adapter → package → confirmation →
+              caller-owned persistence
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="pipeline">
+        <p class="eyebrow">3 · End-to-end pipeline</p>
+        <h2>Six stages turn pixels into decision evidence</h2>
+        <p class="section-intro">
+          Each stage has a narrow job. Image processing improves visibility, OCR
+          reads symbols, and deterministic business rules decide which
+          recognized number most likely means “amount paid.”
+        </p>
+
+        <div class="report-flow">
+          <article class="report-flow-row">
+            <strong>01 · INGEST</strong>
+            <p>
+              <code>_load_image</code> accepts JPG, JPEG, PNG, or WebP. Pillow
+              applies EXIF orientation, converts to RGB, and rejects images
+              above 30 megapixels. NumPy/OpenCV receive a BGR array. Input is
+              still only evidence; no app entity is created.
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>02 · PREPARE</strong>
+            <p>
+              <code>_deskew</code> uses grayscale, Canny edges, and
+              probabilistic Hough lines to estimate a median angle within ±12°.
+              <code>_preprocess</code> may enlarge the image toward 1800px
+              width, normalizes contrast, and adds a white border.
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>03 · VARIANTS</strong>
+            <p>
+              Two views are created: normalized grayscale and adaptive
+              threshold. The second view makes local contrast decisions, which
+              can help dark themes and uneven illumination. OpenCV's official
+              thresholding guide describes this image-processing behavior.
+              <a
+                href="https://docs.opencv.org/4.x/d7/d4d/tutorial_py_thresholding.html"
+                >Primary source</a
+              >
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>04 · OCR</strong>
+            <p>
+              <code>_ocr_lines</code> calls
+              <code>pytesseract.image_to_data</code> with the LSTM engine (<code
+                >--oem 1</code
+              >), page segmentation modes 4, 6, and 11, and preserved interword
+              spacing. With the local Devanagari model present, two variants ×
+              two languages × three layouts produce 12 passes. Without that
+              model, only six English passes run and a warning is emitted.
+              pytesseract is the wrapper; Tesseract is the reader.
+              <a href="https://github.com/madmaze/pytesseract"
+                >Primary source</a
+              >
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>05 · REBUILD</strong>
+            <p>
+              Tesseract can place a left-aligned label and its right-aligned
+              price into different internal blocks. The package rebuilds visual
+              rows from word geometry, overlap, and center distance before
+              interpreting receipt meaning.
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>06 · DECIDE</strong>
+            <p>
+              Unicode digits and combining marks are normalized; currency and
+              amount patterns are extracted; labels classify each row;
+              candidates are scored and grouped across passes; the top group
+              receives a strong, review, or none grade. The final result always
+              sets
+              <code>requires_confirmation: true</code>.
+            </p>
+          </article>
+        </div>
+
+        <div class="equation">
+          2 image variants × 2 languages × 3 PSM layouts = 12 OCR passes
+        </div>
+      </section>
+
+      <section class="section" id="decision">
+        <p class="eyebrow">4 · Candidate and decision logic</p>
+        <h2>Recognition and interpretation are deliberately separate</h2>
+        <p class="section-intro">
+          Tesseract might correctly read several numbers while still not knowing
+          which one the user paid. The Python layer supplies the
+          receipt-specific meaning.
+        </p>
+
+        <div class="grid-3">
+          <article class="card">
+            <h3 style="color: var(--mint)">Payment labels</h3>
+            <p>
+              Amount Paid, Paid by You, Amount Payable, To Pay, Grand Total,
+              Amount Due.
+            </p>
+            <p style="margin-top: 9px">
+              These can support a strong suggestion.
+            </p>
+          </article>
+          <article class="card">
+            <h3 style="color: var(--amber)">Fallback totals</h3>
+            <p>
+              Total Bill Amount, Item Total &amp; GST, MRP Total, generic Total.
+            </p>
+            <p style="margin-top: 9px">
+              Useful when no payment label is available, but never strong.
+            </p>
+          </article>
+          <article class="card">
+            <h3 style="color: var(--coral)">Negative/component rows</h3>
+            <p>
+              Savings, discounts, cashback, subtotals, delivery, taxes, tip,
+              cash, and change.
+            </p>
+            <p style="margin-top: 9px">
+              Used for context or arithmetic, not as the payable winner.
+            </p>
+          </article>
+        </div>
+
+        <div class="grid-2" style="margin-top: 16px">
+          <article class="card">
+            <h3>Per-candidate score</h3>
+            <p>
+              Starts with label meaning, then adds page position, OCR
+              confidence, rightmost-amount evidence, explicit currency, and
+              agreement with the supplied currency context. Conflicting currency
+              evidence is penalized.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Grouped score</h3>
+            <p>
+              Same-valued candidates are merged across pass IDs. The group gains
+              evidence from pass count, language diversity, preprocessing
+              diversity, arithmetic agreement, and currency votes. Conflicts and
+              suspected leading-digit corruption reduce trust.
+            </p>
+          </article>
+        </div>
+
+        <div class="card" style="margin-top: 16px">
+          <h3>Evidence-grade rules</h3>
+          <table class="code-map mobile-cards">
+            <thead>
+              <tr>
+                <th>Grade</th>
+                <th>Meaning</th>
+                <th>Required behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="Grade"><strong>strong</strong></td>
+                <td data-label="Meaning">
+                  Winner has a payment label, no ranking warning, supported
+                  currency, a safe score gap, and independent repeated-language
+                  or multi-pass arithmetic evidence.
+                </td>
+                <td data-label="Required behavior">
+                  Pre-fill the suggestion; user still confirms.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Grade"><strong>review</strong></td>
+                <td data-label="Meaning">
+                  A plausible winner exists, but one or more strong-evidence
+                  conditions are absent.
+                </td>
+                <td data-label="Required behavior">
+                  Show the suggestion and its warning; user reviews carefully.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Grade"><strong>none</strong></td>
+                <td data-label="Meaning">
+                  No acceptable payment or fallback group exists.
+                </td>
+                <td data-label="Required behavior">
+                  Do not invent a total; ask for manual entry.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <aside class="callout" style="margin-top: 16px">
+          <strong>Known corruption guard:</strong> a rupee glyph can be read as
+          a leading 2 or 3—for example ₹356 → 2356. When a similarly supported
+          shorter candidate shares the trailing digits, the longer value is
+          penalized and ambiguity is surfaced.
+        </aside>
+      </section>
+
+      <section class="section" id="contract">
+        <p class="eyebrow">5 · Output contract</p>
+        <h2>The service-shaped output is evidence-rich JSON</h2>
+        <p class="section-intro">
+          The current CLI already returns a useful future-service contract. The
+          compact result can drive the UI, while the candidate and pass evidence
+          remains available for debugging and audits.
+        </p>
+
+        <pre
+          class="report-contract"
+          aria-label="Illustrative receipt OCR JSON output"
+        >
+{
+  "schema_version": "payable-receipt-ocr/v1",
+  "alpha": true,
+  "source": {
+    "filename": "zepto-checkout.png",
+    "dimensions": [1179, 2556]
+  },
+  "processing": {
+    "currency_context": "INR",
+    "pass_count": 12,
+    "languages": ["eng", "Devanagari"],
+    "psm_modes": [4, 6, 11],
+    "variants": ["normalized-grayscale", "adaptive-threshold"]
+  },
+  "result": {
+    "total": "289.86",
+    "currency": "INR",
+    "evidence_grade": "review",
+    "requires_confirmation": true,
+    "needs_review": true,
+    "matched_label": "to pay",
+    "matched_line": "To Pay ... 289.86"
+  },
+  "candidate_groups": ["ranked amount evidence"],
+  "ocr": { "passes": ["raw text and geometry for each pass"] },
+  "warnings": ["evidence or currency warnings"]
+}</pre>
+
+        <div class="grid-2" style="margin-top: 16px">
+          <article class="card">
+            <h3>UI-facing fields</h3>
+            <p>
+              <code>total</code>, <code>currency</code>,
+              <code>evidence_grade</code>, <code>requires_confirmation</code>,
+              <code>matched_label</code>, and <code>warnings</code> are
+              sufficient to render a safe suggestion.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Diagnostic fields</h3>
+            <p>
+              Candidate groups, individual candidates, pass IDs, raw OCR lines,
+              confidence, languages, and preprocessing metadata explain why the
+              winner was chosen. These should not all be sent to an ordinary
+              client by default in production.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="evidence">
+        <p class="eyebrow">6 · Benchmark and current evidence</p>
+        <h2>The gate separates promising behavior from deployable evidence</h2>
+        <p class="section-intro">
+          The benchmark reads a labeled manifest, runs every ready image,
+          records per-case JSON, and computes exact total-and-currency accuracy
+          plus safety violations.
+        </p>
+
+        <div class="equation">
+          eligible ≥ 30 AND each app ≥ 10 AND exact ≥ 90% AND false-strong = 0
+          AND confirmation = 100%
+        </div>
+
+        <div class="grid-2" style="margin-top: 16px">
+          <article class="card">
+            <p class="eyebrow">Exploratory result · observed</p>
+            <h3>35/35 exact on the tuned public corpus</h3>
+            <ul class="mini-list">
+              <li><strong>Blinkit:</strong> 11/11</li>
+              <li><strong>Swiggy:</strong> 10/10</li>
+              <li><strong>Zepto:</strong> 14/14</li>
+              <li><strong>Wrong + strong:</strong> 0</li>
+              <li><strong>Confirmation violations:</strong> 0</li>
+            </ul>
+          </article>
+          <article class="card">
+            <p class="eyebrow">Formal gate · blocked</p>
+            <h3>0 authorized screenshots are ready</h3>
+            <p>
+              Public availability is not redistribution permission, so the
+              internet images are marked unverified-public and excluded from
+              gate metrics. They were also used during tuning, which makes 100%
+              an in-sample result rather than an unbiased estimate of future
+              performance.
+            </p>
+          </article>
+        </div>
+
+        <aside class="callout" style="margin-top: 16px">
+          <strong>Correct next experiment:</strong> collect at least 10
+          authorized, previously unseen screenshots for each app, label the
+          visible final payable amount before examining OCR output, freeze the
+          corpus, and run the v4 pipeline without tuning it mid-test.
+        </aside>
+      </section>
+
+      <section class="section" id="privacy">
+        <p class="eyebrow">7 · Privacy and operational behavior</p>
+        <h2>The POC is local by design, but a service adds new obligations</h2>
+        <div class="grid-2">
+          <article class="card">
+            <h3>What the current POC protects</h3>
+            <ul class="mini-list">
+              <li>
+                Receipt pixels and OCR text are not sent to an external
+                recognition API.
+              </li>
+              <li>
+                Private inputs, downloaded models, and generated reports are
+                Git-ignored.
+              </li>
+              <li>
+                The Devanagari model is downloaded from a pinned URL and
+                verified by SHA-256.
+              </li>
+              <li>
+                The recognizer has no database credentials and cannot create an
+                expense.
+              </li>
+              <li>
+                The model download is the only required setup network request.
+              </li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>What a hosted service must add</h3>
+            <ul class="mini-list">
+              <li>
+                Authenticated internal calls and strict image MIME, size, and
+                dimension checks.
+              </li>
+              <li>
+                Request timeouts, CPU/memory limits, concurrency control, and
+                temporary-file deletion.
+              </li>
+              <li>
+                Log redaction: never log raw OCR text or receipt images by
+                default.
+              </li>
+              <li>Retention policy for uploads and diagnostic evidence.</li>
+              <li>
+                Monitoring for latency, errors, review rate, and user-correction
+                rate.
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="risk">
+        <p class="eyebrow">8 · Risks and explicit limits</p>
+        <h2>What the proof does not cover</h2>
+        <div class="card" style="overflow-x: auto">
+          <table class="code-map mobile-cards">
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>Current status</th>
+                <th>Impact</th>
+                <th>Required response</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="Area">Generalization</td>
+                <td class="risk-high" data-label="Current status">Unproven</td>
+                <td data-label="Impact">The 35/35 result may be overfit.</td>
+                <td data-label="Required response">
+                  Run the frozen authorized holdout.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Area">Latency and capacity</td>
+                <td class="risk-medium" data-label="Current status">
+                  Unmeasured
+                </td>
+                <td data-label="Impact">
+                  Twelve CPU OCR passes may be slow or expensive under
+                  concurrency.
+                </td>
+                <td data-label="Required response">
+                  Profile p50/p95 time, CPU, RAM, and queue depth.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Area">App integration</td>
+                <td class="risk-high" data-label="Current status">Not built</td>
+                <td data-label="Impact">
+                  No upload route, service API, confirmation UI, or deployment
+                  exists.
+                </td>
+                <td data-label="Required response">
+                  Integrate only after the quality gate passes.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Area">Input scope</td>
+                <td class="risk-medium" data-label="Current status">Narrow</td>
+                <td data-label="Impact">
+                  PDF, HEIC, multiple pages, handwriting, and generic invoices
+                  are unsupported.
+                </td>
+                <td data-label="Required response">
+                  Keep product copy and validation aligned with the supported
+                  scope.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Area">Extraction scope</td>
+                <td class="risk-medium" data-label="Current status">
+                  Total only
+                </td>
+                <td data-label="Impact">
+                  Merchant, date, tax, and line items are not reliable outputs.
+                </td>
+                <td data-label="Required response">
+                  Do not imply full receipt understanding.
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Area">Automatic writes</td>
+                <td class="risk-contained" data-label="Current status">
+                  Contained
+                </td>
+                <td data-label="Impact">
+                  The package always requires confirmation and has no
+                  persistence.
+                </td>
+                <td data-label="Required response">
+                  Preserve this boundary in the service design.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="roadmap">
+        <p class="eyebrow">9 · Recommended path to a feature</p>
+        <h2>Use evidence to unlock each engineering step</h2>
+        <div class="report-flow">
+          <article class="report-flow-row">
+            <strong>STEP 1</strong>
+            <p>
+              <strong>Freeze an authorized holdout.</strong> At least 30 unseen
+              screenshots, at least 10 per app, with dark/light, cropped,
+              compressed, decimal, discount, and long-order cases.
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>STEP 2</strong>
+            <p>
+              <strong>Run the quality gate once.</strong> Proceed only at ≥90%
+              exact total+currency, zero wrong strong results, and confirmation
+              required for every case. If it fails, diagnose the misses before
+              changing engines.
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>STEP 3</strong>
+            <p>
+              <strong>Measure operational cost.</strong> Capture per-image
+              p50/p95 latency, CPU, memory, model startup cost, and safe
+              concurrent request count on the intended free/self-hosted machine.
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>STEP 4</strong>
+            <p>
+              <strong>Wrap a narrow HTTP suggestion endpoint.</strong> Accept
+              one validated image and expense currency context; return the
+              compact result contract. Add timeouts, deletion, authentication,
+              and structured error codes. Do not add database access.
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>STEP 5</strong>
+            <p>
+              <strong>Integrate confirmation into the expense form.</strong> The
+              consuming application supplies the image, shows the suggested
+              total and evidence grade, lets the user edit it, and only then
+              sends its ordinary validated expense payload to persistence.
+            </p>
+          </article>
+          <article class="report-flow-row">
+            <strong>STEP 6</strong>
+            <p>
+              <strong>Monitor corrections, not invented confidence.</strong>
+              Track success, review rate, latency, and the difference between
+              OCR suggestions and confirmed values without retaining raw
+              receipts by default.
+            </p>
+          </article>
+        </div>
+
+        <aside class="callout">
+          If hardened Tesseract fails the fresh gate because text is not being
+          recognized—not merely ranked incorrectly—then benchmark a pinned
+          PaddleOCR PP-OCRv5 configuration. Do not replace the current engine
+          before the holdout identifies that need.
+        </aside>
+      </section>
+
+      <section class="section" id="sources">
+        <p class="eyebrow">10 · Sources and code map</p>
+        <h2>Where every conclusion comes from</h2>
+        <div class="grid-2">
+          <article class="card">
+            <h3>Package sources</h3>
+            <ul class="mini-list">
+              <li>
+                <a
+                  href="https://github.com/FireBird1998/payable-receipt-ocr/blob/main/src/payable_receipt_ocr/_engine.py"
+                  ><code>_engine.py</code></a
+                >
+                — image preparation, OCR, and decision logic
+              </li>
+              <li>
+                <a
+                  href="https://github.com/FireBird1998/payable-receipt-ocr/blob/main/src/payable_receipt_ocr/api.py"
+                  ><code>api.py</code></a
+                >
+                — small public interface
+              </li>
+              <li>
+                <a
+                  href="https://github.com/FireBird1998/payable-receipt-ocr/blob/main/src/payable_receipt_ocr/models.py"
+                  ><code>models.py</code></a
+                >
+                — typed confirmation-only result
+              </li>
+              <li>
+                <a
+                  href="https://github.com/FireBird1998/payable-receipt-ocr/blob/main/pyproject.toml"
+                  ><code>pyproject.toml</code></a
+                >
+                — package metadata and dependency ranges
+              </li>
+              <li>
+                <a
+                  href="https://github.com/FireBird1998/payable-receipt-ocr/blob/main/tests/test_public_interface.py"
+                  ><code>test_public_interface.py</code></a
+                >
+                — synthetic interface verification
+              </li>
+              <li>
+                <a
+                  href="https://github.com/FireBird1998/payable-receipt-ocr#readme"
+                  >README and safety contract</a
+                >
+              </li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Primary documentation</h3>
+            <ul class="mini-list">
+              <li>
+                <a href="https://tesseract-ocr.github.io/tessdoc/"
+                  >Tesseract 5 User Manual</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html"
+                  >Tesseract command-line modes</a
+                >
+              </li>
+              <li>
+                <a href="https://github.com/madmaze/pytesseract"
+                  >pytesseract project</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://docs.opencv.org/4.x/d7/d4d/tutorial_py_thresholding.html"
+                  >OpenCV thresholding</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://pillow.readthedocs.io/en/stable/reference/ImageOps.html"
+                  >Pillow ImageOps</a
+                >
+              </li>
+              <li>
+                <a href="https://docs.python.org/3/library/decimal.html"
+                  >Python Decimal</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://packaging.python.org/en/latest/tutorials/packaging-projects/"
+                  >Python Packaging User Guide</a
+                >
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <footer class="next">
+        <div>
+          <h2>Report conclusion</h2>
+          <p>
+            Keep Tesseract/OpenCV/Python for the holdout. Preserve mandatory
+            confirmation. Build the service boundary only after unbiased
+            evidence passes.
+          </p>
+        </div>
+        <a href="learning-lab.html">Revisit the learning lab →</a>
+      </footer>
+    </main>
+  </body>
+</html>

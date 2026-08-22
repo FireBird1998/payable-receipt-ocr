@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Visual documentation for the payable-receipt-ocr Python package."
+    />
+    <link rel="icon" href="data:," />
+    <title>payable-receipt-ocr · Visual documentation</title>
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <p class="eyebrow">Open-source package · visual documentation</p>
+        <h1>Understand the payable receipt pipeline</h1>
+        <p class="lede">
+          Follow a screenshot from pixels to a confirmation-only total
+          suggestion. The recognizer stays local, produces evidence instead of
+          invented confidence, and never persists an expense.
+        </p>
+        <div class="meta">
+          <a
+            class="pill"
+            href="https://github.com/FireBird1998/payable-receipt-ocr"
+            >View source</a
+          >
+          <a class="pill" href="pipeline-report.html">Read the report</a>
+        </div>
+      </header>
+
+      <section class="section">
+        <p class="eyebrow">Choose your depth</p>
+        <h2>Three ways into the same architecture</h2>
+        <div class="grid-3">
+          <article class="card stack-card ocr">
+            <p class="eyebrow">Learn by doing</p>
+            <h3>Interactive learning lab</h3>
+            <p>
+              Click through every stage, answer retrieval checks, and teach the
+              flow back.
+            </p>
+            <p style="margin-top: 18px">
+              <a href="learning-lab.html">Open the lab →</a>
+            </p>
+          </article>
+          <article class="card stack-card">
+            <p class="eyebrow">Understand deeply</p>
+            <h3>Pipeline report</h3>
+            <p>
+              Inspect the implementation, scoring logic, safety contract,
+              evidence, and limits.
+            </p>
+            <p style="margin-top: 18px">
+              <a href="pipeline-report.html">Read the report →</a>
+            </p>
+          </article>
+          <article class="card stack-card future">
+            <p class="eyebrow">Remember quickly</p>
+            <h3>Printable stack map</h3>
+            <p>
+              Keep a compact reference to the six transformations and the
+              integration seam.
+            </p>
+            <p style="margin-top: 18px">
+              <a href="stack-map.html">Open the stack map →</a>
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Safety contract</p>
+        <div class="decision-box">
+          <h3>Recognition is not authorization</h3>
+          <p>
+            Every result sets <code>requires_confirmation: true</code>. A strong
+            grade means the evidence agrees; it never means an application may
+            silently create an expense.
+          </p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

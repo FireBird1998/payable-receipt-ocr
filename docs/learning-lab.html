@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="An interactive lesson on the payable-receipt-ocr package architecture."
+    />
+    <link rel="icon" href="data:," />
+    <title>Learning lab · Trace a receipt through payable-receipt-ocr</title>
+    <link rel="stylesheet" href="assets/styles.css" />
+    <script src="assets/learning-lab.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <p class="eyebrow">Learning lab · Receipt recognition architecture</p>
+        <h1>Trace one screenshot through the package</h1>
+        <p class="lede">
+          Your win for this lesson: explain what reads the image, what chooses
+          the payable amount, what keeps the suggestion safe—and why the package
+          never writes an expense itself.
+        </p>
+        <div class="meta" aria-label="Lesson metadata">
+          <span class="pill">8–10 minutes</span>
+          <span class="pill">One architecture</span>
+          <span class="pill">Four retrieval checks</span>
+          <a class="pill" href="stack-map.html">Open stack reference</a>
+          <a class="pill" href="pipeline-report.html">Read pipeline report</a>
+        </div>
+      </header>
+
+      <section class="section" aria-labelledby="big-idea">
+        <p class="eyebrow">The big idea</p>
+        <h2 id="big-idea">
+          Recognition and persistence are separate responsibilities
+        </h2>
+        <p class="section-intro">
+          payable-receipt-ocr is a local Python module. An application may call
+          it directly or through an adapter, but authentication, expense
+          validation, and persistence remain the application's responsibility.
+        </p>
+
+        <div class="grid-3">
+          <article class="card stack-card">
+            <p class="eyebrow">Consumer · your application</p>
+            <h3>Expense application</h3>
+            <p>
+              Owns people, groups, expenses, authentication, UI, validation, and
+              persistence.
+            </p>
+            <ul class="mini-list">
+              <li>
+                <strong>Input:</strong> an authorized image and currency context
+              </li>
+              <li>
+                <strong>Review:</strong> the user edits or confirms the
+                suggestion
+              </li>
+              <li>
+                <strong>Data:</strong> the application owns all persistence
+              </li>
+            </ul>
+          </article>
+
+          <article class="card stack-card ocr">
+            <p class="eyebrow">Module · Python package</p>
+            <h3>payable-receipt-ocr</h3>
+            <p>
+              Turns a local screenshot into ranked amount evidence and a
+              confirmation-only suggestion.
+            </p>
+            <ul class="mini-list">
+              <li><strong>Image:</strong> Pillow, NumPy, OpenCV</li>
+              <li><strong>Reading:</strong> Tesseract 5 through pytesseract</li>
+              <li><strong>Decision:</strong> Python rules, Decimal, JSON</li>
+            </ul>
+          </article>
+
+          <article class="card stack-card future">
+            <p class="eyebrow">Optional adapter · not included</p>
+            <h3>Self-hosted HTTP adapter</h3>
+            <p>
+              Can expose the Python interface over HTTP without gaining
+              permission to save expenses.
+            </p>
+            <ul class="mini-list">
+              <li><strong>Input:</strong> authorized receipt image</li>
+              <li>
+                <strong>Output:</strong> amount, currency, evidence, warnings
+              </li>
+              <li>
+                <strong>Guard:</strong> user confirms before app persistence
+              </li>
+            </ul>
+          </article>
+        </div>
+
+        <aside class="callout" style="margin-top: 16px">
+          <strong>Important wording:</strong> this avoids paid and cloud
+          generative-AI services, but it is not literally “AI-free.” Tesseract 5
+          uses an offline LSTM recognition engine. The important privacy
+          property is that the package processes the receipt locally.
+          <a href="https://tesseract-ocr.github.io/tessdoc/"
+            >Tesseract documents the LSTM engine</a
+          >.
+        </aside>
+      </section>
+
+      <section class="section" aria-labelledby="pipeline-title">
+        <p class="eyebrow">Interactive trace</p>
+        <h2 id="pipeline-title">Click each stage: image → evidence</h2>
+        <p class="section-intro">
+          The recognizer is a pipeline. Each stage produces a more useful
+          representation, but only the final human confirmation makes the
+          suggested total usable in an expense.
+        </p>
+
+        <div class="pipeline" aria-label="Receipt recognition pipeline">
+          <button class="stage" data-stage="input" aria-pressed="true">
+            <span class="stage-number">01</span>
+            <strong>Load image</strong>
+            <small>Pillow fixes orientation and converts the screenshot.</small>
+          </button>
+          <button class="stage" data-stage="prepare" aria-pressed="false">
+            <span class="stage-number">02</span>
+            <strong>Prepare views</strong>
+            <small>OpenCV deskews and creates two contrast variants.</small>
+          </button>
+          <button class="stage" data-stage="read" aria-pressed="false">
+            <span class="stage-number">03</span>
+            <strong>Read text</strong>
+            <small>Tesseract performs 12 recognition passes.</small>
+          </button>
+          <button class="stage" data-stage="rank" aria-pressed="false">
+            <span class="stage-number">04</span>
+            <strong>Rank money</strong>
+            <small>Python favors “To Pay” over savings and subtotals.</small>
+          </button>
+          <button class="stage" data-stage="guard" aria-pressed="false">
+            <span class="stage-number">05</span>
+            <strong>Grade evidence</strong>
+            <small>Strong, review, or none—always confirmation-only.</small>
+          </button>
+          <button class="stage" data-stage="benchmark" aria-pressed="false">
+            <span class="stage-number">06</span>
+            <strong>Test the gate</strong>
+            <small>Exact totals, zero false-strong, authorized holdout.</small>
+          </button>
+        </div>
+
+        <div class="stage-detail" data-stage-detail aria-live="polite">
+          <h3>1 · Input is evidence, not an expense</h3>
+          <p>
+            The package accepts JPG, PNG, or WebP. Pillow fixes EXIF orientation
+            and converts the image into a predictable RGB representation. No
+            database record is created here.
+          </p>
+        </div>
+
+        <div class="equation" style="margin-top: 16px">
+          2 image variants × 2 language models × 3 layout modes = 12 OCR passes
+        </div>
+        <p class="section-intro" style="margin-top: 12px">
+          OpenCV's official guide explains why adaptive thresholding helps when
+          illumination varies; pytesseract's official repository explains that
+          <code>image_to_data</code> returns boxes, confidence, and other
+          recognition metadata.
+          <a
+            href="https://docs.opencv.org/4.x/d7/d4d/tutorial_py_thresholding.html"
+            >OpenCV source</a
+          >
+          ·
+          <a href="https://github.com/madmaze/pytesseract"
+            >pytesseract source</a
+          >
+        </p>
+      </section>
+
+      <section class="section" aria-labelledby="roles-title">
+        <p class="eyebrow">Technology roles</p>
+        <h2 id="roles-title">Do not confuse the reader with the judge</h2>
+        <div class="grid-2">
+          <article class="card">
+            <h3>Pillow + OpenCV prepare pixels</h3>
+            <p>
+              Pillow loads and orients the file. OpenCV converts, deskews,
+              resizes, normalizes, and thresholds it. Neither decides which
+              rupee value is the final payment.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Tesseract reads visible text</h3>
+            <p>
+              Tesseract is the OCR engine. pytesseract calls that executable
+              from Python and returns text, geometry, and confidence. It may
+              read several plausible numbers incorrectly.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Python interprets receipt meaning</h3>
+            <p>
+              Repository code identifies money, recognizes labels, groups
+              agreement across passes, and ranks payment labels above fallback
+              totals. Decimal keeps currency math exact.
+            </p>
+          </article>
+          <article class="card">
+            <h3>The user authorizes the expense</h3>
+            <p>
+              <code>requires_confirmation</code> is always true. Even “strong”
+              means “safe to suggest,” never “safe to silently save.”
+              Caller-owned persistence belongs after confirmation, not before
+              it.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="current-future-title">
+        <p class="eyebrow">Current versus future</p>
+        <h2 id="current-future-title">Know which arrows exist</h2>
+        <div class="grid-2">
+          <article class="card">
+            <p class="eyebrow">Exists now</p>
+            <h3>Local command flow</h3>
+            <p class="mono">
+              image file → recognize(...) → Tesseract subprocesses → typed
+              suggestion
+            </p>
+          </article>
+          <article class="card">
+            <p class="eyebrow">Proposed after holdout</p>
+            <h3>Product integration flow</h3>
+            <p class="mono">
+              application → optional adapter → Python package → suggestion →
+              user confirmation → application persistence
+            </p>
+          </article>
+        </div>
+        <aside class="callout" style="margin-top: 16px">
+          The future service should be a <em>suggestion service</em>, not an
+          expense-writing service. That narrow boundary contains OCR mistakes
+          and preserves the calling application's authentication, validation,
+          and database responsibilities. The package intentionally contains no
+          HTTP server or database adapter.
+        </aside>
+      </section>
+
+      <section class="section" aria-labelledby="retrieval-title">
+        <p class="eyebrow">Retrieval practice</p>
+        <h2 id="retrieval-title">Close the explanation; recover the model</h2>
+        <p class="section-intro">
+          Answer without scrolling upward. Immediate feedback builds a more
+          durable mental model than rereading alone. Score:
+          <strong data-score>0 / 4</strong>
+        </p>
+
+        <div class="grid-2">
+          <article class="quiz" data-quiz>
+            <h3>Which component actually recognizes text?</h3>
+            <div class="quiz-options">
+              <button
+                class="answer"
+                data-answer="wrong"
+                data-incorrect-feedback="OpenCV prepares pixels; it does not run text recognition."
+              >
+                OpenCV
+              </button>
+              <button
+                class="answer"
+                data-answer="correct"
+                data-correct-feedback="Correct. Tesseract is the OCR engine."
+              >
+                Tesseract
+              </button>
+              <button
+                class="answer"
+                data-answer="wrong"
+                data-incorrect-feedback="A database may persist confirmed app data; it does not read images."
+              >
+                Database
+              </button>
+            </div>
+            <p class="feedback" data-feedback aria-live="polite"></p>
+          </article>
+
+          <article class="quiz" data-quiz>
+            <h3>What is the package-to-application relationship?</h3>
+            <div class="quiz-options">
+              <button
+                class="answer"
+                data-answer="wrong"
+                data-incorrect-feedback="The package suggests a value but never owns application persistence."
+              >
+                Package writes expenses
+              </button>
+              <button
+                class="answer"
+                data-answer="correct"
+                data-correct-feedback="Correct. Recognition and application persistence stay separate."
+              >
+                Separate responsibilities
+              </button>
+              <button
+                class="answer"
+                data-answer="wrong"
+                data-incorrect-feedback="The package intentionally performs no database writes."
+              >
+                Database linked
+              </button>
+            </div>
+            <p class="feedback" data-feedback aria-live="polite"></p>
+          </article>
+
+          <article class="quiz" data-quiz>
+            <h3>What happens after OCR suggests a total?</h3>
+            <div class="quiz-options">
+              <button
+                class="answer"
+                data-answer="wrong"
+                data-incorrect-feedback="OCR evidence never authorizes an automatic save."
+              >
+                Save without review
+              </button>
+              <button
+                class="answer"
+                data-answer="correct"
+                data-correct-feedback="Correct. Every evidence grade still requires confirmation."
+              >
+                Confirm every total
+              </button>
+              <button
+                class="answer"
+                data-answer="wrong"
+                data-incorrect-feedback="Strong is a suggestion grade, not permission to persist."
+              >
+                Trust strong grade
+              </button>
+            </div>
+            <p class="feedback" data-feedback aria-live="polite"></p>
+          </article>
+
+          <article class="quiz" data-quiz>
+            <h3>Which three dimensions create 12 OCR passes?</h3>
+            <div class="quiz-options">
+              <button
+                class="answer"
+                data-answer="correct"
+                data-correct-feedback="Correct. Two variants × two languages × three layouts."
+              >
+                Image language layout
+              </button>
+              <button
+                class="answer"
+                data-answer="wrong"
+                data-incorrect-feedback="The database and browser are outside the OCR pass matrix."
+              >
+                Image database browser
+              </button>
+              <button
+                class="answer"
+                data-answer="wrong"
+                data-incorrect-feedback="The current POC has no cloud API or storage pass."
+              >
+                Model API storage
+              </button>
+            </div>
+            <p class="feedback" data-feedback aria-live="polite"></p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="teach-back-title">
+        <p class="eyebrow">Teach-back drill</p>
+        <h2 id="teach-back-title">Explain the flow in your own words</h2>
+        <div class="drill">
+          <p>
+            Imagine a teammate asks, “What happens when we give this system a
+            Zepto screenshot?” Write a short explanation from memory. The
+            checker looks for five architectural ideas, not exact phrasing.
+          </p>
+          <textarea
+            data-teach-back
+            aria-label="Teach back the receipt recognition flow"
+            placeholder="The image first…"
+          ></textarea>
+          <div
+            class="keyword-grid"
+            data-keywords
+            aria-label="Recovered concepts"
+          ></div>
+          <div class="progress" aria-hidden="true">
+            <span data-progress></span>
+          </div>
+          <p class="feedback" data-teach-feedback aria-live="polite">
+            Start writing to see which concepts you recovered.
+          </p>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="code-map-title">
+        <p class="eyebrow">Code map</p>
+        <h2 id="code-map-title">Where to look when curiosity strikes</h2>
+        <div class="card" style="overflow-x: auto">
+          <table class="code-map">
+            <thead>
+              <tr>
+                <th>Question</th>
+                <th>Source</th>
+                <th>Key location</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>What is installed?</td>
+                <td><code>pyproject.toml</code></td>
+                <td>Dependencies and package metadata</td>
+              </tr>
+              <tr>
+                <td>How are pixels prepared?</td>
+                <td><code>src/payable_receipt_ocr/_engine.py</code></td>
+                <td>
+                  <code>_load_image</code>, <code>_deskew</code>,
+                  <code>_preprocess</code>
+                </td>
+              </tr>
+              <tr>
+                <td>How is text read?</td>
+                <td><code>src/payable_receipt_ocr/_engine.py</code></td>
+                <td><code>_ocr_lines</code>, <code>process_receipt</code></td>
+              </tr>
+              <tr>
+                <td>How is the payable total chosen?</td>
+                <td><code>src/payable_receipt_ocr/_engine.py</code></td>
+                <td>
+                  <code>_classify_line</code>,
+                  <code>_aggregate_candidates</code>
+                </td>
+              </tr>
+              <tr>
+                <td>What makes evidence strong?</td>
+                <td><code>src/payable_receipt_ocr/_engine.py</code></td>
+                <td><code>_evidence_grade</code>, <code>_warnings</code></td>
+              </tr>
+              <tr>
+                <td>What verifies package behavior?</td>
+                <td><code>tests/test_public_interface.py</code></td>
+                <td><code>recognize(...)</code> interface tests</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="primary-source-title">
+        <p class="eyebrow">Primary source recommendation</p>
+        <h2 id="primary-source-title">Read one thing next</h2>
+        <div class="card">
+          <h3>
+            <a href="https://tesseract-ocr.github.io/tessdoc/"
+              >Tesseract 5 User Manual</a
+            >
+          </h3>
+          <p>
+            Read only the introduction and command-line usage sections. Your
+            goal is to recognize Tesseract as the OCR engine and understand that
+            language data, OCR-engine mode, and page segmentation are explicit
+            inputs—not magic hidden inside Python.
+          </p>
+        </div>
+      </section>
+
+      <footer class="next">
+        <div>
+          <h2>Now ask me what felt fuzzy</h2>
+          <p>
+            Good follow-ups: “Why 12 passes?”, “How does ranking work?”, or
+            “Where would the HTTP service fit?”
+          </p>
+        </div>
+        <a href="stack-map.html">Keep the reference →</a>
+      </footer>
+    </main>
+  </body>
+</html>

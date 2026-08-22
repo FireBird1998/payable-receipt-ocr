@@ -1,0 +1,16 @@
+.DS_Store
+.idea/
+.vscode/
+*.egg-info/
+*.py[cod]
+__pycache__/
+.coverage
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+htmlcov/
+private-inputs/
+output/
+*.traineddata
