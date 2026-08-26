@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v7
@@ -22,10 +22,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install Tesseract
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes tesseract-ocr
       - name: Install package
         run: |
           python -m pip install --upgrade pip
@@ -35,8 +31,106 @@ jobs:
       - name: Format
         run: ruff format --check .
       - name: Test
-        run: pytest
+        run: pytest -m "not integration"
       - name: Build
         run: python -m build
       - name: Check distributions
         run: twine check dist/*
+      - name: Inspect distribution contents
+        run: python tools/check_artifacts.py dist/*.whl dist/*.tar.gz
+
+  conformance-linux:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Load pinned runtime baseline
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          baseline = tomllib.loads(
+              Path("src/payable_receipt_ocr/runtime-baseline.toml").read_text(encoding="utf-8")
+          )
+          values = {
+              "EXPECTED_TESSERACT_VERSION": baseline["tesseract_package_version"],
+              "EXPECTED_ENG_PACKAGE_VERSION": baseline["eng_package_version"],
+              "EXPECTED_DEVA_PACKAGE_VERSION": baseline["devanagari_package_version"],
+              "ENG_MODEL_SHA256": baseline["models"]["eng"],
+              "DEVA_MODEL_SHA256": baseline["models"]["Devanagari"],
+          }
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as environment:
+              for name, value in values.items():
+                  environment.write(f"{name}={value}\n")
+          PY
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/payable-receipt-ocr/tessdata
+          key: tessdata-${{ runner.os }}-${{ env.ENG_MODEL_SHA256 }}-${{ env.DEVA_MODEL_SHA256 }}
+      - name: Check pinned apt versions are available
+        run: |
+          sudo apt-get update
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+
+          expected = {
+              "tesseract-ocr": os.environ["EXPECTED_TESSERACT_VERSION"],
+              "tesseract-ocr-eng": os.environ["EXPECTED_ENG_PACKAGE_VERSION"],
+              "tesseract-ocr-script-deva": os.environ["EXPECTED_DEVA_PACKAGE_VERSION"],
+          }
+          for package_name, expected_version in expected.items():
+              output = subprocess.check_output(
+                  ["apt-cache", "policy", package_name],
+                  text=True,
+              )
+              if expected_version not in output:
+                  print(
+                      f"Missing required apt version for {package_name}: {expected_version}",
+                      file=sys.stderr,
+                  )
+                  print(output, file=sys.stderr)
+                  raise SystemExit(2)
+          PY
+      - name: Install pinned OCR runtime packages
+        run: |
+          sudo apt-get install --yes \
+            "tesseract-ocr=${EXPECTED_TESSERACT_VERSION}" \
+            "tesseract-ocr-eng=${EXPECTED_ENG_PACKAGE_VERSION}" \
+            "tesseract-ocr-script-deva=${EXPECTED_DEVA_PACKAGE_VERSION}"
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --editable '.[dev]'
+      - name: Install required INR OCR model
+        run: ./scripts/setup-models.sh
+      - name: Validate conformant runtime through public CLI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw
+
+          image_path = Path("conformance-smoke.png")
+          image = Image.new("RGB", (1200, 800), color=(255, 255, 255))
+          drawer = ImageDraw.Draw(image)
+          drawer.text((80, 80), "TO PAY INR 123.45", fill=(0, 0, 0))
+          image.save(image_path)
+          PY
+          python -m payable_receipt_ocr conformance-smoke.png --currency INR --runtime-policy conformant > conformance-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("conformance-smoke.json").read_text(encoding="utf-8"))
+          if payload["runtime"]["conformant"] is not True:
+              raise SystemExit("runtime is not conformant under conformant policy")
+          PY
+      - name: Integration tests
+        run: pytest -m integration

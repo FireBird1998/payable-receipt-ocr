@@ -30,7 +30,6 @@ dependencies = [
   "numpy>=1.24,<3",
   "opencv-python-headless>=4.9,<5",
   "Pillow>=10,<13",
-  "pytesseract>=0.3.13,<0.4",
 ]
 
 [project.optional-dependencies]
@@ -53,6 +52,9 @@ Source = "https://github.com/FireBird1998/payable-receipt-ocr"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+payable_receipt_ocr = ["runtime-baseline.toml"]
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
@@ -61,6 +63,7 @@ markers = ["integration: requires a local Tesseract executable"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+extend-exclude = ["notes"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B"]

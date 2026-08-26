@@ -6,9 +6,15 @@ from .errors import (
     InputFileError,
     OcrEngineError,
     ReceiptOcrError,
+    RuntimeBaselineError,
     UnsupportedImageError,
 )
-from .models import EvidenceGrade, RecognitionResult
+from .models import (
+    EvidenceGrade,
+    RecognitionResult,
+    RecognitionWarning,
+    RuntimeProvenance,
+)
 
 __all__ = [
     "ConfigurationError",
@@ -17,6 +23,9 @@ __all__ = [
     "OcrEngineError",
     "ReceiptOcrError",
     "RecognitionResult",
+    "RecognitionWarning",
+    "RuntimeBaselineError",
+    "RuntimeProvenance",
     "UnsupportedImageError",
     "recognize",
 ]

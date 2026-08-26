@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/payable-receipt-ocr/tools/holdout/manifest.schema.json",
+  "title": "Private holdout manifest",
+  "description": "Private corpus manifest for payable-receipt-ocr holdout evaluation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "corpus_version",
+    "frozen_at",
+    "manifest_sha256",
+    "runtime_baseline_id",
+    "cases"
+  ],
+  "properties": {
+    "corpus_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque holdout version identifier, e.g. holdout-v2026-08."
+    },
+    "frozen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timezone-qualified ISO-8601 freeze timestamp for this corpus version."
+    },
+    "manifest_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 digest of canonicalized manifest JSON with this field removed."
+    },
+    "runtime_baseline_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Expected package runtime baseline identifier for conformant runs."
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 300,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case_id",
+          "image_relpath",
+          "image_sha256",
+          "app",
+          "capture_type",
+          "expected_total",
+          "expected_currency"
+        ],
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Opaque case identifier. Do not embed filenames or personal data."
+          },
+          "image_relpath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path relative to corpus root; evaluator rejects absolute and escaping paths."
+          },
+          "image_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 digest of image bytes."
+          },
+          "app": {
+            "type": "string",
+            "enum": ["blinkit", "swiggy", "zepto"],
+            "description": "Source app bucket used for stratification gates."
+          },
+          "capture_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Opaque capture category such as screenshot or camera."
+          },
+          "expected_total": {
+            "type": "string",
+            "pattern": "^(?:0\\.(?:0[1-9]|[1-9][0-9])|[1-9][0-9]*\\.[0-9]{2})$",
+            "description": "Positive canonical two-decimal label assigned before OCR evaluation."
+          },
+          "expected_currency": {
+            "type": "string",
+            "const": "INR",
+            "description": "Expected currency for this corpus."
+          }
+        }
+      }
+    }
+  }
+}

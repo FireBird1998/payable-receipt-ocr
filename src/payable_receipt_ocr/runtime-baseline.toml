@@ -1,0 +1,15 @@
+baseline_id = "linux-noble-amd64-2026-08"
+model_repository_commit = "87416418657359cb625c412a48b6e1d6d41c29bd"
+os_name = "ubuntu-24.04"
+arch = "amd64"
+tesseract_first_line = "tesseract 5.3.4"
+tesseract_package_version = "5.3.4-1build5"
+eng_package_version = "1:4.1.0-2"
+devanagari_package_version = "1:4.1.0-2"
+oem = 1
+psm_allowed = "4,6,11"
+omp_thread_limit = "1"
+
+[models]
+eng = "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
+Devanagari = "3bbb87c1de2a6a2ef0a97dc041e6eea2723a1c22d638f5e38157a5cd441c12b7"
