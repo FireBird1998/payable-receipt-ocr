@@ -1,0 +1,93 @@
+---
+title: Architecture
+description: Module structure, call direction, privacy model, and why the package has no plugin interface.
+---
+
+`payable-receipt-ocr` is a single-process, synchronous, stateless library. It reads one image,
+runs OCR locally, and returns a typed suggestion. It makes no network requests, spawns no background
+threads, and makes no persistent writes during recognition.
+
+## Module map
+
+| Module | Visibility | Role |
+|---|---|---|
+| `api.py` | Public | `recognize()` entry point — validates arguments, delegates to engine |
+| `models.py` | Public | `RecognitionResult`, `RecognitionWarning`, `RuntimeProvenance` |
+| `errors.py` | Public | `ReceiptOcrError` and all subclasses |
+| `cli.py` | Public | CLI adapter — calls `recognize()`, serializes `result.to_dict()` |
+| `_engine.py` | Private | `process_receipt()` — orchestrates the pipeline stages |
+| `_image.py` | Private | Image loading, EXIF correction, deskew, contrast, variant creation |
+| `_ocr.py` | Private | OCR pass scheduling, Tesseract subprocess execution, TSV parsing |
+| `_interpretation.py` | Private | Candidate extraction, label classification, evidence grading |
+| `_runtime.py` | Private | Model discovery, checksum verification, baseline tuple check |
+| `_contracts.py` | Private | Typed frozen dataclasses for inter-stage data |
+
+Private modules carry a `_` prefix. They are not importable from the public namespace and are not
+covered by the schema stability guarantee.
+
+## Public seam
+
+Three things are public and stable:
+
+| Surface | Stability |
+|---|---|
+| `recognize(image, *, currency, …)` → `RecognitionResult` | Stable |
+| `RecognitionResult`, `RecognitionWarning`, `RuntimeProvenance` | Stable |
+| JSON schema `payable-receipt-ocr/1` | Stable |
+
+Internal module names, function signatures, and data structures may change without notice.
+
+## Call direction
+
+```
+recognize()                    [api.py — public]
+  └─► process_receipt()        [_engine.py — private orchestrator]
+        ├─► load_source_image
+        │   prepare_variants   [_image.py]
+        ├─► validate_runtime   [_runtime.py]
+        ├─► build_schedule
+        │   execute_schedule   [_ocr.py]
+        └─► interpret          [_interpretation.py]
+              └─ typed records  [_contracts.py]
+```
+
+## Privacy model
+
+**No state between calls.** Each `recognize()` is independent.
+
+**No network.** No HTTP, DNS, or socket operations.
+
+**No persistent writes.** Prepared image variants are written to `TMPDIR` and deleted in `finally`
+blocks. A crash can prevent cleanup. Tesseract may create additional temporaries. Use `tmpfs` for
+sensitive deployments.
+
+**No logging.** The package does not emit Python `logging` records.
+
+**Diagnostics are opt-in and per-call.** When `diagnostics=False` (default), no raw OCR text is
+retained in the result object. When `diagnostics=True`, the result contains the full recognized
+text from every pass. Diagnostics cannot be recovered after the call returns without `diagnostics=True`.
+
+## Why there is no plugin interface
+
+The package has no OCR engine plugin or currency provider interface. Tesseract is the only backend;
+INR is the only production-scope currency.
+
+A plugin system would:
+- Widen the trust boundary (plugins can inject arbitrary OCR results)
+- Complicate holdout reproducibility (results would depend on which plugins are active)
+- Add integration-test surface without a concrete use case
+
+## Stateless, local, synchronous
+
+- **Stateless**: no cache, session, or connection pool between calls.
+- **Local**: all computation runs in the caller's process, on the caller's machine.
+- **Synchronous**: `recognize()` blocks the calling thread. Concurrency is the service layer's
+  responsibility.
+
+## Development vs. conformance
+
+macOS is a fully supported development environment. The conformance environment is
+`ubuntu-24.04 / amd64 / tesseract 5.3.4`. Accuracy numbers are only meaningful when measured on
+the retained conformance instance.
+
+See [Runtime conformance](/docs/concepts/runtime-conformance) for the full policy.

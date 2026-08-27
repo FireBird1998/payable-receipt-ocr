@@ -1,0 +1,204 @@
+---
+title: Python API
+description: Complete guide to the recognize() function, its parameters, return type, and error handling.
+---
+
+## Import
+
+```python
+from payable_receipt_ocr import recognize
+```
+
+## Function signature
+
+```python
+def recognize(
+    image: str | Path,
+    *,
+    currency: str = "INR",
+    tessdata_dir: str | Path | None = None,
+    diagnostics: bool = False,
+    deadline_seconds: float = 5.0,
+    pass_timeout_seconds: float = 2.0,
+    runtime_policy: Literal["development", "conformant"] = "development",
+) -> RecognitionResult: ...
+```
+
+All parameters after `image` are keyword-only.
+
+## Parameters
+
+### `image` (required)
+
+Path to the receipt image. Accepts `str` or `pathlib.Path`. The path is resolved before use;
+a missing or unreadable file raises `InputFileError` immediately.
+
+Supported formats: JPG, JPEG, PNG, WebP.
+
+### `currency`
+
+ISO currency code. Only `"INR"` is supported in the current production scope. Passing any other
+value raises `ConfigurationError`.
+
+### `tessdata_dir`
+
+Explicit path to the directory containing `eng.traineddata` and `Devanagari.traineddata`. If
+`None`, the package falls back to the `PAYABLE_RECEIPT_OCR_TESSDATA_DIR` environment variable,
+then to the XDG user data directory. See [Tesseract setup](/docs/getting-started/tesseract-setup).
+
+### `diagnostics`
+
+When `True`, raw OCR text from every completed pass and the ranked candidate list are included in
+the result object. These data can contain personal information visible on the receipt.
+
+Diagnostics must be requested at call time. Calling `result.to_dict(include_diagnostics=True)` on
+a result produced without `diagnostics=True` raises `ValueError`.
+
+See [Diagnostics and privacy](/docs/guides/diagnostics-privacy).
+
+### `deadline_seconds`
+
+Maximum total wall-clock time for the entire `recognize()` call, in seconds. Default: `5.0`.
+
+If the deadline is reached before all planned passes complete, remaining passes are skipped,
+`result.deadline_exceeded` is set to `True`, and `result.degraded` is set to `True`. Any
+degradation caps the evidence grade at `"review"`.
+
+### `pass_timeout_seconds`
+
+Maximum time for each individual Tesseract subprocess pass, in seconds. Default: `2.0`.
+
+A pass that exceeds this limit is cancelled, counted in `passes_failed`, and a `pass_timeout`
+warning is added. If all passes time out, `OcrEngineError` is raised.
+
+### `runtime_policy`
+
+Controls how the function responds when the running environment does not match the pinned
+conformance baseline:
+
+| Policy | Behavior on mismatch |
+|---|---|
+| `"development"` (default) | Continues; sets `result.runtime.conformant = False` |
+| `"conformant"` | Raises `RuntimeBaselineError` |
+
+Model checksum verification runs regardless of policy and always blocks on mismatch.
+
+## Return value: `RecognitionResult`
+
+A frozen dataclass with the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `total` | `Decimal \| None` | Suggested payable total; `None` when `evidence_grade="none"` |
+| `currency` | `str \| None` | ISO currency code; `None` when `evidence_grade="none"` |
+| `evidence_grade` | `"strong" \| "review" \| "none"` | Corroboration level |
+| `requires_confirmation` | `True` | **Always `True`** |
+| `authorizes_persistence` | `False` | **Always `False`** |
+| `matched_label` | `str \| None` | The label text that anchored the suggestion |
+| `label_kind` | `"payment" \| "fallback" \| None` | Whether the label was a payment label or fallback total |
+| `warnings` | `tuple[RecognitionWarning, ...]` | Zero or more warning objects |
+| `source_filename` | `str` | Basename of the input image path |
+| `source_dimensions` | `tuple[int, int]` | `(width, height)` of decoded source in pixels |
+| `passes_planned` | `int` | OCR passes scheduled |
+| `passes_completed` | `int` | Passes that returned a result |
+| `passes_failed` | `int` | Passes that timed out or raised an error |
+| `degraded` | `bool` | `True` if any pass failed or deadline was reached |
+| `deadline_exceeded` | `bool` | `True` if deadline was reached |
+| `duration_ms` | `int` | Total wall time in milliseconds |
+| `runtime` | `RuntimeProvenance` | Runtime identity |
+
+### Convenience properties
+
+| Property | Type | Notes |
+|---|---|---|
+| `needs_review` | `bool` | `evidence_grade != "strong"` — backward-compat; not in JSON |
+| `pass_count` | `int` | Alias for `passes_completed` — backward-compat; not in JSON |
+
+## Serialization
+
+`RecognitionResult.to_dict()` returns the JSON-serializable `payable-receipt-ocr/1` payload:
+
+```python
+result = recognize("receipt.png", currency="INR")
+payload = result.to_dict()
+# payload["schema_version"] == "payable-receipt-ocr/1"
+# payload["result"]["requires_confirmation"] == True
+# payload["result"]["authorizes_persistence"] == False
+```
+
+To include diagnostics (only when `diagnostics=True` was passed to `recognize()`):
+
+```python
+result = recognize("receipt.png", currency="INR", diagnostics=True)
+payload = result.to_dict(include_diagnostics=True)
+```
+
+## Error handling
+
+All controlled errors inherit from `ReceiptOcrError`. Catch the base class to handle all of them,
+or catch specific subclasses:
+
+```python
+from payable_receipt_ocr import recognize
+from payable_receipt_ocr.errors import (
+    ReceiptOcrError,
+    InputFileError,
+    UnsupportedImageError,
+    ConfigurationError,
+    RuntimeBaselineError,
+    OcrEngineError,
+)
+
+try:
+    result = recognize("receipt.png", currency="INR")
+except InputFileError as e:
+    print(f"File not found or unreadable: {e}")
+except UnsupportedImageError as e:
+    print(f"Image format or size not supported: {e}")
+except RuntimeBaselineError as e:
+    print(f"Tesseract runtime or model setup is invalid: {e}")
+except OcrEngineError as e:
+    print(f"All OCR passes failed or the deadline was reached: {e}")
+except ReceiptOcrError as e:
+    print(f"Recognition error [{e.code}]: {e}")
+```
+
+See [Errors and CLI exits](/docs/reference/errors-and-exits) for a full table of error codes.
+
+## Full example
+
+```python
+from decimal import Decimal
+from payable_receipt_ocr import recognize
+from payable_receipt_ocr.errors import ReceiptOcrError
+
+def suggest_total(image_path: str) -> Decimal | None:
+    """Return a suggested total, requiring a human to confirm before saving."""
+    try:
+        result = recognize(
+            image_path,
+            currency="INR",
+            deadline_seconds=5.0,
+            pass_timeout_seconds=2.0,
+        )
+    except ReceiptOcrError as e:
+        print(f"OCR failed [{e.code}]: {e}")
+        return None
+
+    # Log any warnings
+    for warning in result.warnings:
+        print(f"  warning [{warning.code}]: {warning.message}")
+
+    if result.evidence_grade == "none":
+        print("No total found. Manual entry required.")
+        return None
+
+    # Always show the suggestion to a user — never auto-save
+    grade_label = "strong" if result.evidence_grade == "strong" else "low confidence"
+    print(f"Suggested total: ₹{result.total} ({grade_label})")
+    print("Please confirm before saving.")
+
+    # result.requires_confirmation is True
+    # result.authorizes_persistence is False
+    return result.total  # caller must confirm before persisting
+```

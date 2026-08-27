@@ -1,0 +1,233 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --font-sans: 'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --background: oklch(0.985 0.004 78);
+  --foreground: oklch(0.19 0.02 255);
+  --muted: oklch(0.958 0.01 80);
+  --muted-foreground: oklch(0.42 0.02 255);
+  --border: oklch(0.84 0.02 82);
+  --card: oklch(0.997 0.002 78);
+  --accent: oklch(0.56 0.15 279);
+  --accent-foreground: oklch(0.99 0.01 85);
+  --focus: oklch(0.65 0.18 28);
+
+  --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
+  --color-fd-muted: var(--muted);
+  --color-fd-muted-foreground: var(--muted-foreground);
+  --color-fd-border: var(--border);
+  --color-fd-card: var(--card);
+  --color-fd-primary: var(--accent);
+  --color-fd-primary-foreground: var(--accent-foreground);
+}
+
+.dark {
+  --background: oklch(0.16 0.02 255);
+  --foreground: oklch(0.955 0.01 84);
+  --muted: oklch(0.25 0.02 255);
+  --muted-foreground: oklch(0.76 0.02 75);
+  --border: oklch(0.36 0.03 260);
+  --card: oklch(0.2 0.02 258);
+  --accent: oklch(0.72 0.12 280);
+  --accent-foreground: oklch(0.18 0.03 255);
+  --focus: oklch(0.74 0.16 31);
+}
+
+html {
+  scrollbar-gutter: stable;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+* {
+  border-color: var(--border);
+}
+
+a:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 0.35rem;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+.landing-root {
+  background:
+    radial-gradient(1200px 540px at 95% -10%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 52%),
+    radial-gradient(700px 460px at 0% 10%, color-mix(in oklab, var(--focus) 15%, transparent), transparent 66%),
+    var(--background);
+}
+
+.landing-shell {
+  font-feature-settings: 'ss01' 1;
+}
+
+.landing-tag {
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.73rem;
+  color: var(--muted-foreground);
+  font-weight: 650;
+}
+
+.landing-title {
+  font-size: clamp(2rem, 4.8vw, 3.8rem);
+  line-height: 1.03;
+  letter-spacing: -0.03em;
+  font-weight: 780;
+  max-width: 18ch;
+}
+
+.landing-lead {
+  max-width: 62ch;
+  line-height: 1.58;
+  color: color-mix(in oklab, var(--foreground) 88%, var(--muted-foreground));
+  font-size: clamp(1.03rem, 1.8vw, 1.16rem);
+}
+
+.landing-cta-row {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.landing-cta-primary,
+.landing-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.62rem 1.15rem;
+  font-weight: 650;
+  border-radius: 0.72rem;
+  border: 1px solid var(--border);
+  transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.landing-cta-primary {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-color: color-mix(in oklab, var(--accent) 72%, var(--border));
+}
+
+.landing-cta-secondary {
+  background: color-mix(in oklab, var(--card) 82%, transparent);
+  color: var(--foreground);
+}
+
+.landing-cta-primary:hover,
+.landing-cta-secondary:hover {
+  transform: translateY(-1px);
+}
+
+.landing-facts {
+  display: grid;
+  gap: 0.58rem;
+  color: var(--muted-foreground);
+  padding-left: 1.05rem;
+  font-size: 0.96rem;
+  line-height: 1.4;
+}
+
+.receipt-slip {
+  align-self: stretch;
+  border: 1px solid color-mix(in oklab, var(--border) 75%, var(--accent));
+  border-radius: 0.9rem;
+  padding: clamp(1.1rem, 2.5vw, 1.65rem);
+  background:
+    linear-gradient(
+      175deg,
+      color-mix(in oklab, var(--card) 95%, var(--accent) 5%) 0%,
+      color-mix(in oklab, var(--card) 92%, var(--focus) 8%) 100%
+    );
+  box-shadow: 0 12px 32px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+
+.receipt-slip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+  margin-bottom: 1rem;
+}
+
+.receipt-kicker,
+.receipt-status {
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+}
+
+.receipt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.95rem 0.8rem;
+}
+
+.receipt-grid dt {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--muted-foreground);
+}
+
+.receipt-grid dd {
+  margin-top: 0.18rem;
+  font-family: var(--font-mono);
+  font-size: clamp(1.04rem, 1.9vw, 1.22rem);
+  font-weight: 620;
+  color: var(--foreground);
+}
+
+.receipt-footnote {
+  margin-top: 1.15rem;
+  font-size: 0.9rem;
+  line-height: 1.42;
+  color: color-mix(in oklab, var(--foreground) 83%, var(--muted-foreground));
+}
+
+@media (max-width: 768px) {
+  .landing-shell {
+    padding-inline: 1rem;
+  }
+
+  .receipt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .landing-cta-primary:hover,
+  .landing-cta-secondary:hover {
+    transform: none;
+  }
+}

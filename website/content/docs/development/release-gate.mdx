@@ -1,0 +1,103 @@
+---
+title: Release Gate
+description: The checklist that must be complete before the version is bumped from 0.x alpha to 1.0.0.
+---
+
+<Callout type="warn" title="All accuracy gates are currently unproven">
+  Version `0.1.0a1` is alpha. The private holdout corpus does not exist yet, the conformant
+  runtime has not been retained, and no gate measurement has been taken. Every item below marked
+  as unmet (`[ ]`) is currently unproven.
+</Callout>
+
+## Accuracy gate
+
+| # | Status | Requirement |
+|---|---|---|
+| 1 | `[ ]` | Frozen private holdout corpus authorized — ≥ 300 cases, ≥ 100 per app (blinkit, swiggy, zepto), collected with explicit consent |
+| 2 | `[ ]` | Pre-OCR labels verified — ground-truth labels created before any OCR run; ≥ 10% double-labelled and adjudicated |
+| 3 | `[ ]` | Image deduplication complete — SHA-256 exact dedup and perceptual near-duplicate review |
+| 4 | `[ ]` | Exact total + currency ≥ 95% — `exact_match_rate >= 0.95` on the frozen corpus under `runtime_policy="conformant"` on the retained reference runtime |
+| 5 | `[ ]` | False-strong count = 0 — zero cases where `evidence_grade == "strong"` and `total + currency` is incorrect |
+| 6 | `[ ]` | Confirmation rate = 100% — every result has `requires_confirmation=True`, confirmed in the holdout run |
+
+## Runtime and performance gate
+
+| # | Status | Requirement |
+|---|---|---|
+| 7 | `[ ]` | Retained reference runtime available — immutable instance of `ubuntu-24.04 / amd64 / tesseract 5.3.4` (baseline `linux-noble-amd64-2026-08`) provisioned and locked |
+| 8 | `[ ]` | p95 latency < 5 000 ms — measured on the retained reference runtime across all holdout cases |
+| 9 | `[ ]` | 600 MiB memory ceiling — peak per-process memory ≤ 600 MiB on the reference runtime |
+| 10 | `[ ]` | Deterministic repeat probe — same image run twice produces identical `total`, `currency`, `evidence_grade`, and `matched_label` |
+| 11 | `[ ]` | Model and runtime SHA-256 hashes recorded — `runtime-baseline.toml` checksums match the hashes measured during the holdout run |
+
+## CI gate
+
+| # | Status | Requirement |
+|---|---|---|
+| 12 | `[x]` | Portable tests green — `pytest -m 'not integration'` passes |
+| 13 | `[ ]` | Integration tests green — `pytest -m integration` passes with Tesseract installed |
+| 14 | `[ ]` | Conformance CI pipeline green — CI run on the retained reference runtime with `runtime_policy="conformant"` |
+| 15 | `[x]` | Package build and twine check — `python -m build && twine check dist/*` succeeds |
+| 16 | `[x]` | Artifact privacy scan — `tools/check_artifacts.py` reports no receipt images or private data |
+
+## Privacy and security gate
+
+| # | Status | Requirement |
+|---|---|---|
+| 17 | `[ ]` | Privacy review complete — documented review covering: no real data in repo, diagnostics default off, `source.filename` handling, Tesseract temp-file behaviour, no network requests |
+| 18 | `[ ]` | Security review complete — review of input validation, error message content, and dependency versions |
+| 19 | `[ ]` | No private data in public repository — confirmed that no holdout images, OCR text, or per-case labels appear in git history, CI artifacts, or published docs |
+
+## Documentation gate
+
+| # | Status | Requirement |
+|---|---|---|
+| 20 | `[x]` | Schema reference published |
+| 21 | `[x]` | Architecture documented |
+| 22 | `[x]` | ADRs 0001–0008 complete |
+| 23 | `[ ]` | Migration notes verified — at least one consumer has been tested against the guide |
+| 24 | `[ ]` | README updated for v1 |
+
+## Gate thresholds in detail
+
+The evaluator checks all four accuracy/performance thresholds simultaneously in a single run:
+
+```json
+{
+  "gates": {
+    "eligible": true,
+    "exact_amount_currency_rate_min_0_95": true,
+    "false_strong_count_zero": true,
+    "confirmation_rate_eq_1_0": true,
+    "p95_duration_ms_lt_5000": true
+  },
+  "gate_passed": true
+}
+```
+
+A run is eligible only when:
+- `runtime_policy == "conformant"`
+- All cases ran on the retained reference runtime (`conformant=true` for every case)
+- All cases matched the expected baseline ID
+- No unexpected errors occurred
+
+An ineligible run does not count toward the gate regardless of metric values.
+
+## Statistical caveat
+
+Passing the gate (≥ 95% exact on ≥ 300 cases, 0 false-strong) establishes that the algorithm
+met the threshold on a specific frozen corpus under a specific retained runtime. It does **not**
+prove:
+
+- The true population error rate is below 5%.
+- Future images from the same apps will not produce false-strong results.
+- Performance will be identical on different runtime environments.
+
+The gate is a necessary condition for v1, not a sufficient proof of production-readiness.
+
+## Supported environment non-guarantees
+
+The v1 conformance environment is `ubuntu-24.04 / amd64 / tesseract 5.3.4` with the pinned model
+files. Other configurations (other Linux distributions, macOS, ARM, other Tesseract versions) are
+supported for development but are not the conformance target and are not covered by the accuracy
+gate.

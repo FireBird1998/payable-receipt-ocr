@@ -1,0 +1,214 @@
+---
+title: Result Schema v1
+description: Every field in the payable-receipt-ocr/1 JSON contract, warning codes, and migration from the old alpha schema.
+---
+
+The schema identifier is `"payable-receipt-ocr/1"` (no `v`). Both the Python `result.to_dict()`
+method and the CLI produce this schema. The normative source is
+[`docs/schema/v1.md`](https://github.com/FireBird1998/payable-receipt-ocr/blob/main/docs/schema/v1.md)
+in the repository.
+
+## Full example
+
+A typical result from a Blinkit / Swiggy / Zepto checkout screenshot:
+
+```json
+{
+  "schema_version": "payable-receipt-ocr/1",
+  "source": {
+    "filename": "zepto-checkout.png",
+    "dimensions": [1080, 1920]
+  },
+  "processing": {
+    "passes_planned": 12,
+    "passes_completed": 10,
+    "passes_failed": 0,
+    "degraded": false,
+    "deadline_exceeded": false,
+    "duration_ms": 2843
+  },
+  "runtime": {
+    "baseline_id": "linux-noble-amd64-2026-08",
+    "conformant": false,
+    "tesseract_version": "tesseract 5.5.0",
+    "model_sha256": {
+      "eng": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "Devanagari": "3bbb87c1de2a6a2ef0a97dc041e6eea2723a1c22d638f5e38157a5cd441c12b7"
+    }
+  },
+  "result": {
+    "total": "289.86",
+    "currency": "INR",
+    "evidence_grade": "strong",
+    "requires_confirmation": true,
+    "authorizes_persistence": false,
+    "matched_label": "to pay",
+    "label_kind": "payment"
+  },
+  "warnings": []
+}
+```
+
+A `"none"` evidence result (no total found):
+
+```json
+{
+  "schema_version": "payable-receipt-ocr/1",
+  "result": {
+    "total": null,
+    "currency": null,
+    "evidence_grade": "none",
+    "requires_confirmation": true,
+    "authorizes_persistence": false,
+    "matched_label": null,
+    "label_kind": null
+  },
+  "warnings": [
+    {"code": "no_candidate", "message": "No payment or fallback total label with a monetary value was extracted."}
+  ]
+}
+```
+
+## Top-level fields
+
+| Field | Type | Description |
+|---|---|---|
+| `schema_version` | `string` | Always `"payable-receipt-ocr/1"` |
+| `source` | object | Source image metadata |
+| `processing` | object | Pipeline execution metrics |
+| `runtime` | object | OCR runtime identity |
+| `result` | object | The recognition suggestion |
+| `warnings` | array | Zero or more warning objects |
+| `diagnostics` | object | Present only when `diagnostics=True`; contains raw OCR text |
+
+## `source`
+
+| Field | Type | Description |
+|---|---|---|
+| `filename` | `string` | Basename of the input image path |
+| `dimensions` | `[int, int]` | `[width, height]` of decoded source image in pixels |
+
+`filename` reflects the basename of whatever path was passed to `recognize()`. If the path
+contains personal information, scrub it before logging or transmitting the result.
+
+## `processing`
+
+| Field | Type | Description |
+|---|---|---|
+| `passes_planned` | `int` | OCR passes scheduled |
+| `passes_completed` | `int` | Passes that returned a result |
+| `passes_failed` | `int` | Passes that timed out or raised an error |
+| `degraded` | `bool` | `true` if any pass failed or the deadline was reached |
+| `deadline_exceeded` | `bool` | `true` if the total deadline was reached |
+| `duration_ms` | `int` | Total wall time for the `recognize()` call in milliseconds |
+
+## `runtime`
+
+| Field | Type | Description |
+|---|---|---|
+| `baseline_id` | `string` | Baseline identifier from `runtime-baseline.toml` |
+| `conformant` | `bool` | `true` only when OS, arch, and Tesseract version all match the baseline tuple |
+| `tesseract_version` | `string` | First line of `tesseract --version` output |
+| `model_sha256` | object | `{"eng": "<hex>", "Devanagari": "<hex>"}` — checksums of verified model files |
+
+## `result`
+
+| Field | Type | Description |
+|---|---|---|
+| `total` | `string \| null` | Decimal string (e.g. `"289.86"`); `null` when `evidence_grade="none"` |
+| `currency` | `string \| null` | ISO currency code; `null` when `evidence_grade="none"` |
+| `evidence_grade` | `string` | One of `"strong"`, `"review"`, `"none"` |
+| `requires_confirmation` | `true` | **Always `true`** — never changes |
+| `authorizes_persistence` | `false` | **Always `false`** — never changes |
+| `matched_label` | `string \| null` | Label text that anchored the suggestion |
+| `label_kind` | `"payment" \| "fallback" \| null` | Whether the label was a payment label or a fallback total |
+
+## Warnings
+
+Each warning is an object with two fields:
+
+```json
+{"code": "weak_evidence", "message": "Independent OCR evidence did not meet the strong-suggestion gate."}
+```
+
+| Field | Notes |
+|---|---|
+| `code` | Stable identifier — safe to branch on in code |
+| `message` | Human-readable — may change across versions; do not parse |
+
+### Stable warning codes
+
+| Code | Meaning |
+|---|---|
+| `no_candidate` | No payment or fallback total was extracted |
+| `weak_evidence` | Grade is not `"strong"` |
+| `currency_conflict` | Conflicting explicit currency markers in OCR output |
+| `competing_total` | A competing total has equal or greater cross-pass support |
+| `currency_context_mismatch` | Best-supported total conflicts with the supplied currency context |
+| `ranking_warning` | Possible digit corruption in a candidate |
+| `degraded_processing` | One or more passes failed or the deadline was reached |
+| `pass_timeout` | An individual OCR pass timed out |
+| `pass_failed` | An individual OCR pass raised an error |
+| `deadline_exceeded` | The total deadline was reached |
+
+New warning codes may be added in additive updates without a schema version bump. Consumers must
+not treat an unrecognized warning code as an error.
+
+## Evidence grade semantics
+
+| Grade | `total` | `currency` | Meaning |
+|---|---|---|---|
+| `"strong"` | non-null | non-null | Payment-labelled, INR-confirmed, multi-pass agreement, no conflicts, not degraded |
+| `"review"` | non-null | non-null | A total was found but not all corroboration criteria were met |
+| `"none"` | `null` | `null` | No supported total extracted |
+
+`"strong"` still requires human confirmation. See [Evidence grades](/docs/concepts/evidence-grades).
+
+## Diagnostic opt-in
+
+```python
+result = recognize("receipt.png", currency="INR", diagnostics=True)
+payload = result.to_dict(include_diagnostics=True)
+# payload["diagnostics"]["ocr"]["passes"][0]["raw_text"]
+```
+
+`diagnostics` is absent from the output by default. Calling `to_dict(include_diagnostics=True)`
+on a result produced without `diagnostics=True` raises `ValueError`.
+
+## Python-only properties (not in JSON)
+
+| Property | Type | Value |
+|---|---|---|
+| `needs_review` | `bool` | `evidence_grade != "strong"` |
+| `pass_count` | `int` | Alias for `passes_completed` |
+
+## Migration from the old alpha schema
+
+If you parsed the old alpha JSON (`"payable-receipt-ocr/v1"`), update the following:
+
+**1. `schema_version` string changed:**
+```diff
+-"schema_version": "payable-receipt-ocr/v1"
++"schema_version": "payable-receipt-ocr/1"
+```
+
+**2. `result.needs_review` removed from JSON** — use `evidence_grade != "strong"` instead.
+
+**3. `result.matched_line` removed** — no replacement.
+
+**4. `warnings` changed from string array to object array:**
+```diff
+-"warnings": ["weak_evidence"]
++"warnings": [{"code": "weak_evidence", "message": "..."}]
+```
+
+**5. `pass_count` moved out of `result`:**
+```diff
+-"result": { ..., "pass_count": 6 }
++"processing": { ..., "passes_completed": 6 }
+```
+
+## Compatibility policy
+
+After v1, additive changes (new optional fields, new warning codes) will not bump the schema
+version. Consumers must ignore unknown fields to remain forward-compatible.

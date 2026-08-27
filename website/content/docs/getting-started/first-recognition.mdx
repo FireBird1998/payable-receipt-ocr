@@ -1,0 +1,96 @@
+---
+title: First Recognition
+description: Run your first OCR call on a receipt screenshot.
+---
+
+Once you have [installed the package and models](/docs/getting-started/installation), recognition
+is a single function call.
+
+## Basic call
+
+```python
+from payable_receipt_ocr import recognize
+
+result = recognize("zepto-checkout.png", currency="INR")
+
+print(result.total)           # Decimal('289.86') or None
+print(result.currency)        # 'INR' or None
+print(result.evidence_grade)  # 'strong', 'review', or 'none'
+print(result.requires_confirmation)  # always True
+print(result.authorizes_persistence) # always False
+```
+
+<Callout type="info">
+  `currency` defaults to `"INR"`. It is the only supported value. Passing any other value raises
+  `ConfigurationError`.
+</Callout>
+
+## Handling the result
+
+Always check `evidence_grade` and always require confirmation before storing anything:
+
+```python
+from payable_receipt_ocr import recognize
+
+result = recognize("blinkit-checkout.png", currency="INR")
+
+if result.evidence_grade == "none":
+    # No total found — ask the user to enter it manually
+    print("Could not read total. Please enter the amount.")
+
+elif result.evidence_grade == "review":
+    # A total was found but evidence is weak — show it, require user confirmation
+    print(f"Suggested total: ₹{result.total} (low confidence — please verify)")
+    # prompt user to confirm or correct
+
+elif result.evidence_grade == "strong":
+    # Strong multi-pass agreement — still show it, still require confirmation
+    print(f"Suggested total: ₹{result.total}")
+    # prompt user to confirm — do NOT auto-save
+
+# result.requires_confirmation is always True
+# result.authorizes_persistence is always False
+```
+
+## Checking warnings
+
+Warnings carry stable `code` values you can branch on. Messages are human-readable but may change:
+
+```python
+for warning in result.warnings:
+    if warning.code == "degraded_processing":
+        print("Some OCR passes timed out — result may be less reliable")
+    elif warning.code == "competing_total":
+        print("Multiple totals found — manual verification recommended")
+    else:
+        print(f"[{warning.code}] {warning.message}")
+```
+
+## CLI equivalent
+
+```bash
+payable-receipt-ocr zepto-checkout.png --currency INR
+```
+
+The CLI outputs compact JSON to stdout and exits 0 on success:
+
+```json
+{
+  "schema_version": "payable-receipt-ocr/1",
+  "result": {
+    "total": "289.86",
+    "currency": "INR",
+    "evidence_grade": "strong",
+    "requires_confirmation": true,
+    "authorizes_persistence": false
+  }
+}
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Python API" description="All parameters, error handling, and advanced usage." href="/docs/guides/python-api" />
+  <Card title="CLI guide" description="All flags, exit codes, and output format." href="/docs/guides/cli" />
+  <Card title="Handling results safely" description="Branching on evidence grade without auto-saving." href="/docs/guides/handling-results" />
+</Cards>

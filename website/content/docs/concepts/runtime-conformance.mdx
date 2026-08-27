@@ -1,0 +1,98 @@
+---
+title: Runtime Conformance
+description: Development vs. conformant policy, the baseline tuple, and what conformant=false means.
+---
+
+## Why runtime conformance matters
+
+OCR accuracy is sensitive to the exact Tesseract version, model files, and OS-level rendering. A
+result that is `"strong"` on one Tesseract version may be `"review"` on another.
+
+The package distinguishes two stances:
+
+| Policy | Behavior on runtime mismatch |
+|---|---|
+| `"development"` (default) | Continues; sets `result.runtime.conformant = False` |
+| `"conformant"` | Raises `RuntimeBaselineError` immediately |
+
+Model checksum verification runs regardless of policy and always blocks on mismatch.
+
+## The baseline tuple
+
+The current conformance target is:
+
+```toml
+baseline_id           = "linux-noble-amd64-2026-08"
+os_name               = "ubuntu-24.04"
+arch                  = "amd64"
+tesseract_first_line  = "tesseract 5.3.4"
+```
+
+These values come from `runtime-baseline.toml` in the package. The baseline is the **candidate**
+conformance target. Benchmark results on this exact retained runtime are required before
+`conformant=true` becomes a meaningful quality signal for accuracy gate purposes.
+
+## The model checksums
+
+```toml
+[models]
+eng        = "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
+Devanagari = "3bbb87c1de2a6a2ef0a97dc041e6eea2723a1c22d638f5e38157a5cd441c12b7"
+```
+
+Both files are checksummed on every `recognize()` call. A mismatch raises `RuntimeBaselineError`
+regardless of `runtime_policy`.
+
+## Reading `runtime` in the result
+
+```python
+result = recognize("receipt.png", currency="INR")
+
+print(result.runtime.baseline_id)      # "linux-noble-amd64-2026-08"
+print(result.runtime.conformant)       # True only on the exact baseline tuple
+print(result.runtime.tesseract_version) # e.g. "tesseract 5.5.0 ..."
+print(result.runtime.model_sha256)     # {"eng": "...", "Devanagari": "..."}
+```
+
+`result.runtime.conformant` is `False` on macOS even with correct model files, because macOS
+does not match the baseline OS/arch tuple.
+
+## Development vs. conformant in practice
+
+**Development (default):** Use this when iterating locally, running unit tests, or integrating
+the library. On macOS or any non-baseline Linux, the library functions correctly and produces
+results. Accuracy numbers from a development-policy run are not suitable for gate measurement.
+
+**Conformant:** Use this for the private holdout evaluation run and for any benchmark intended to
+feed into the v1 release gate. The evaluator and benchmark tool both accept `--runtime-policy conformant`.
+
+```bash
+# Development run — fine for iteration
+python tools/benchmark.py tests/fixtures/*.png --repetitions 3
+
+# Conformant run — only valid on the retained ubuntu-24.04 / amd64 / tesseract 5.3.4 instance
+python tools/benchmark.py tests/fixtures/*.png \
+  --repetitions 3 \
+  --runtime-policy conformant
+```
+
+## Baseline-affecting changes
+
+The following changes require a new holdout evaluation run before the new baseline is conformant:
+
+- Pinned model SHA-256 hashes in `runtime-baseline.toml`
+- `tesseract_first_line`, `os_name`, or `arch` fields in `runtime-baseline.toml`
+- Image preprocessing pipeline (`_image.py`)
+- OCR pass schedule (`_ocr.py`)
+- Evidence grading logic (`_interpretation.py`)
+
+Record such changes in an ADR under `docs/adr/`.
+
+## macOS on the development path
+
+macOS is a fully supported development environment. The full test suite — both portable and
+integration — runs on macOS. Contributions developed on macOS are expected and welcome.
+
+macOS is **not** the conformance target. Latency figures, p95 deadline claims, and accuracy gate
+measurements are only meaningful when taken on the retained Ubuntu 24.04 / amd64 / tesseract 5.3.4
+instance.

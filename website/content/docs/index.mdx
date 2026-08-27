@@ -1,0 +1,77 @@
+---
+title: Overview
+description: Local, payment-aware receipt OCR that suggests the amount actually paid — and always requires human confirmation.
+---
+
+`payable-receipt-ocr` is a Python library that reads a receipt screenshot, runs OCR locally using
+Tesseract, and returns a **suggestion** for the payable total. It is tuned for INR checkout
+screenshots from Blinkit, Swiggy, and Zepto.
+
+<Callout type="warn" title="Alpha software">
+  This project is an **evidence-producing recogniser**, not an accounting system. The accuracy gate
+  required for v1 has not been measured yet. Never save an expense without showing the suggestion
+  to a person for confirmation.
+</Callout>
+
+## The safety contract
+
+Two invariants are enforced in code and cannot be overridden by any caller:
+
+```python
+result.requires_confirmation   # always True
+result.authorizes_persistence  # always False
+```
+
+Even when `evidence_grade` is `"strong"`, the result is a suggestion that requires a human to
+confirm before any expense is persisted. Strong evidence means independent OCR passes agreed — it
+is not write permission.
+
+## What it does
+
+- Runs up to 12 sequential local Tesseract OCR passes per image (4 baseline + up to 8 adaptive).
+- Applies geometric row reconstruction to match right-aligned prices with their payment labels.
+- Grades evidence as `"strong"`, `"review"`, or `"none"` based on multi-pass corroboration.
+- Returns a typed `RecognitionResult` with the total, currency, grade, warnings, and runtime provenance.
+- Makes no network requests and writes no persistent files.
+
+## Supported scope
+
+| Supported | Not supported |
+|---|---|
+| JPG, JPEG, PNG, WebP images | PDFs, HEIC, multi-page documents |
+| INR currency (₹, Rs., INR) | USD, EUR, GBP (not production-scope) |
+| Blinkit, Swiggy, Zepto checkout screenshots | Handwriting, scanned physical receipts |
+| Payable-total suggestion | Line-item extraction, merchant/date extraction |
+| Up to 10 MiB / 12 megapixels | Receipt storage, authentication, HTTP server |
+
+## Public seam
+
+Three things are public and stable:
+
+| Surface | Location |
+|---|---|
+| `recognize(image, *, currency, …)` | `payable_receipt_ocr.recognize` |
+| `RecognitionResult` and related types | `payable_receipt_ocr` top-level |
+| JSON schema `payable-receipt-ocr/1` | Shared by Python `to_dict()` and the CLI |
+
+Everything else — internal module names, private function signatures, intermediate data structures —
+is implementation detail and may change without notice.
+
+## Project status
+
+Version `0.1.0a1` is alpha. v1 is blocked until the private holdout accuracy gate is cleared:
+
+- ≥ 300 frozen, authorized private holdout cases (≥ 100 per app)
+- Exact total + currency ≥ 95% on the conformant runtime
+- Zero false-strong results
+- 100% confirmation required
+- p95 call duration < 5 s on the retained reference runtime
+
+**None of these thresholds have been measured yet.**
+
+<Cards>
+  <Card title="Installation" description="Install the package and Tesseract models." href="/docs/getting-started/installation" />
+  <Card title="First recognition" description="Run your first OCR call in minutes." href="/docs/getting-started/first-recognition" />
+  <Card title="Python API" description="Full guide to the recognize() function." href="/docs/guides/python-api" />
+  <Card title="Result schema" description="Every field in the JSON contract." href="/docs/reference/result-schema" />
+</Cards>

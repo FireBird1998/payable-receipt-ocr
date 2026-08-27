@@ -1,0 +1,141 @@
+---
+title: Handling Results Safely
+description: Branch on evidence grade, handle warnings, and enforce confirmation — without auto-saving.
+---
+
+## The two invariants
+
+Every `RecognitionResult` — regardless of evidence grade — carries two permanent properties:
+
+```python
+result.requires_confirmation   # always True
+result.authorizes_persistence  # always False
+```
+
+These are structural constraints enforced in code. No evidence grade, no application logic, and no
+configuration value changes them. A result is always a **suggestion** that requires a human to
+confirm.
+
+## Branching on evidence grade
+
+```python
+from payable_receipt_ocr import recognize
+
+result = recognize("swiggy-checkout.png", currency="INR")
+
+match result.evidence_grade:
+    case "strong":
+        # Payment-labelled, INR-confirmed, multi-pass agreement, no conflicts.
+        # Still requires human confirmation — do not auto-save.
+        show_suggestion(result.total, confidence="high")
+        confirmed = ask_user_to_confirm(result.total)
+
+    case "review":
+        # A total was found but did not meet all corroboration criteria.
+        # Extra caution warranted.
+        show_suggestion(result.total, confidence="low")
+        confirmed = ask_user_to_confirm_with_warning(result.total)
+
+    case "none":
+        # No total could be extracted.
+        total_total = None
+        confirmed_total = ask_user_to_enter_manually()
+```
+
+<Callout type="warn">
+  `"strong"` evidence is **not permission to save**. It means independent OCR passes agreed. The
+  result can still be wrong — the pipeline does not see the physical receipt and cannot verify
+  against a payment gateway. Always show the suggestion and require confirmation.
+</Callout>
+
+## What each grade means
+
+| Grade | `total` | `currency` | What happened |
+|---|---|---|---|
+| `"strong"` | non-null | non-null | Payment label found, INR marker confirmed, ≥2-language or arithmetic corroboration, no conflicts, not degraded |
+| `"review"` | non-null | non-null | A total was found but at least one corroboration criterion was not met |
+| `"none"` | `null` | `null` | No payment or fallback total was extracted |
+
+## Reading warnings
+
+Warning codes are stable and safe to branch on. Warning messages are human-readable but may change
+across versions. Parse `code`, not `message`:
+
+```python
+ACTIONABLE_CODES = {
+    "degraded_processing": "Some OCR passes did not complete — verify carefully",
+    "competing_total": "Multiple totals found — select manually if unsure",
+    "currency_conflict": "Conflicting currency markers — review the receipt",
+    "ranking_warning": "Possible digit corruption detected",
+}
+
+for warning in result.warnings:
+    if warning.code in ACTIONABLE_CODES:
+        show_user_alert(ACTIONABLE_CODES[warning.code])
+    # Unknown codes: ignore or log at DEBUG — new codes are additive
+```
+
+## Degraded results
+
+When `result.degraded` is `True`, one or more passes failed or the deadline was reached. The
+evidence grade is capped at `"review"` in this case.
+
+```python
+if result.degraded:
+    if result.deadline_exceeded:
+        print("Recognition timed out — result may be incomplete")
+    else:
+        print(f"{result.passes_failed} pass(es) failed — result may be less reliable")
+```
+
+## Serializing to JSON
+
+```python
+import json
+
+result = recognize("receipt.png", currency="INR")
+payload = result.to_dict()
+
+# Safe to log: does not contain raw OCR text by default
+json_str = json.dumps(payload, ensure_ascii=False)
+```
+
+`source.filename` in the output is the basename of the input path. If the filename contains
+personal information, scrub it before logging or transmitting the result:
+
+```python
+payload = result.to_dict()
+# Scrub filename if needed before logging
+payload["source"]["filename"] = "redacted"
+```
+
+## Pattern: confirmation gate
+
+A confirmation gate is a function that always returns `None` until a human has verified the
+suggestion:
+
+```python
+from decimal import Decimal
+from payable_receipt_ocr import recognize
+from payable_receipt_ocr.errors import ReceiptOcrError
+
+def get_confirmed_total(image_path: str, confirm_fn) -> Decimal | None:
+    """
+    Suggest a total and gate on user confirmation.
+    `confirm_fn(total, grade)` must return True for the caller to proceed.
+    Returns None if recognition failed or the user rejected the suggestion.
+    """
+    try:
+        result = recognize(image_path, currency="INR")
+    except ReceiptOcrError:
+        return None
+
+    if result.evidence_grade == "none":
+        return None
+
+    # Always ask — result.authorizes_persistence is always False
+    if confirm_fn(result.total, result.evidence_grade):
+        return result.total
+
+    return None
+```

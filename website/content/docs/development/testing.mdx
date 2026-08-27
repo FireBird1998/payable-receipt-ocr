@@ -1,0 +1,90 @@
+---
+title: Testing
+description: Running portable and integration tests, test data rules, and artifact privacy checks.
+---
+
+## Test suites
+
+The project has two test suites with different runtime requirements:
+
+| Suite | Marker | Tesseract required | Models required |
+|---|---|---|---|
+| Portable | `not integration` | No | No |
+| Integration | `integration` | Yes | Yes |
+
+## Running portable tests
+
+```bash
+pytest -m 'not integration'
+```
+
+Portable tests cover the public interface contract (`recognize()` signature, error types, schema
+validation, result invariants) using synthetic fixtures. They do not invoke Tesseract. They pass
+on any machine with Python 3.10+ installed.
+
+CI runs portable tests on every push.
+
+## Running integration tests
+
+Integration tests run the full pipeline against Tesseract and the model files:
+
+```bash
+# First, ensure Tesseract and models are installed
+./scripts/setup-models.sh
+
+pytest -m integration
+```
+
+## Linting and formatting
+
+```bash
+ruff check .
+ruff format --check .
+```
+
+## Artifact privacy check
+
+Before submitting a pull request, confirm that no real receipt data has been added to the build:
+
+```bash
+python -m build
+python tools/check_artifacts.py dist/
+```
+
+`tools/check_artifacts.py` scans build artifacts for receipt images, OCR dumps, and private data.
+A green result is a required CI gate item for v1.
+
+## Test data rules
+
+<Callout type="error" title="Never commit real receipts">
+  Do not commit real customer receipts, downloaded checkout screenshots, OCR output containing
+  personal information, or proprietary benchmark corpora to this repository — ever. Not in test
+  fixtures, not in issue attachments, not in PR comments.
+</Callout>
+
+- Use **synthetic fixtures** for all tests. The `tests/fixtures/` directory contains only
+  programmatically generated images.
+- If a real receipt condition is needed to reproduce a bug, describe it in plain text and create a
+  synthetic image that approximates it.
+- The `tests/fixtures/README.md` documents what each fixture represents.
+
+## Test fixtures
+
+| Fixture | What it tests |
+|---|---|
+| `clean-screenshot.png` | A clean, high-contrast receipt layout |
+| `angled-photo.jpg` | A slightly rotated image (deskew path) |
+| `multiple-totals.png` | A receipt with more than one candidate total (competing-total path) |
+
+All fixtures are synthetic. Do not replace them with real receipt images.
+
+## CI
+
+CI runs:
+1. Portable tests on every push (no Tesseract required).
+2. Integration tests when Tesseract and models are available.
+3. Package build + twine check (`python -m build && twine check dist/*`).
+4. Artifact privacy scan (`tools/check_artifacts.py dist/`).
+
+Integration tests and conformance CI on the retained reference runtime are required for the v1
+release gate. See [Release gate](/docs/development/release-gate).

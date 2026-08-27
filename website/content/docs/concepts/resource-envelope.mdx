@@ -1,0 +1,103 @@
+---
+title: Resource and Deadline Envelope
+description: Input size limits, time budgets, and how the pipeline handles deadline and pass timeouts.
+---
+
+## Input limits
+
+| Limit | Value |
+|---|---|
+| File size | 10 MiB |
+| Decoded source pixels | 12 megapixels |
+| Processed image width | ≤ 1 600 px |
+| Processed image longest side | ≤ 2 600 px |
+| Processed pixels (variants) | ≤ 4.5 MP |
+
+Files above 10 MiB or images that decode to more than 12 megapixels raise `UnsupportedImageError`
+before any OCR is attempted. Processing variants are always scaled down to fit the limits above.
+
+## Time budgets
+
+Two time limits apply:
+
+| Parameter | Default | Scope |
+|---|---|---|
+| `deadline_seconds` | `5.0` | Total wall time for the entire `recognize()` call |
+| `pass_timeout_seconds` | `2.0` | Per-Tesseract-subprocess pass |
+
+Both can be adjusted at call time:
+
+```python
+result = recognize(
+    "receipt.png",
+    currency="INR",
+    deadline_seconds=8.0,     # allow more total time
+    pass_timeout_seconds=3.0, # allow more per pass
+)
+```
+
+## How deadline enforcement works
+
+Before each pass, the engine checks remaining time against `deadline_seconds`. If fewer than
+`pass_timeout_seconds` remain, the pass is skipped. This ensures no single pass can run beyond
+the global deadline.
+
+If the deadline is reached mid-schedule:
+
+- Remaining planned passes are cancelled.
+- `result.deadline_exceeded` is set to `True`.
+- `result.degraded` is set to `True`.
+- A `deadline_exceeded` warning is added.
+- The evidence grade is capped at `"review"` regardless of what was found.
+
+## How pass timeout works
+
+Each Tesseract subprocess runs under its own `pass_timeout_seconds` limit. A pass that exceeds
+it is terminated:
+
+- `passes_failed` is incremented.
+- A `pass_timeout` warning is added.
+- If the deadline allows, subsequent passes continue.
+
+If every pass times out or fails, `OcrEngineError` is raised.
+
+## Effect on evidence grade
+
+Any degradation — even a single failed pass — caps the evidence grade at `"review"`:
+
+```python
+if result.degraded:
+    # result.evidence_grade is at most "review"
+    # result.passes_failed > 0 or result.deadline_exceeded is True
+    assert result.evidence_grade in ("review", "none")
+```
+
+## Concurrency model
+
+`recognize()` is synchronous and runs all passes sequentially in the calling thread. There is no
+internal thread pool or process pool. The Tesseract subprocess receives `OMP_THREAD_LIMIT=1` to
+prevent it from spawning its own threads.
+
+If you need to process multiple images concurrently, use a thread pool or process pool in your
+service layer:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+from payable_receipt_ocr import recognize
+
+images = ["receipt1.png", "receipt2.png", "receipt3.png"]
+
+with ThreadPoolExecutor(max_workers=4) as pool:
+    results = list(pool.map(
+        lambda p: recognize(p, currency="INR"),
+        images,
+    ))
+```
+
+## p95 latency target
+
+The v1 release gate requires p95 call duration < 5 000 ms on the retained conformance runtime
+(`ubuntu-24.04 / amd64 / tesseract 5.3.4`). This measurement has not been completed yet.
+
+Latency on macOS or other development environments is informative but does not count toward the
+gate. See [Experimentation workflow](/docs/development/experimentation) for benchmarking commands.

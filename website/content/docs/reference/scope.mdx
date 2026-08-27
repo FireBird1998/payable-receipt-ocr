@@ -1,0 +1,92 @@
+---
+title: Supported and Unsupported Scope
+description: Exact current scope, format limits, and what the package explicitly does not support.
+---
+
+## Supported
+
+### Image formats
+
+| Format | Extension |
+|---|---|
+| JPEG | `.jpg`, `.jpeg` |
+| PNG | `.png` |
+| WebP | `.webp` |
+
+### Size limits
+
+| Limit | Value |
+|---|---|
+| File size | ≤ 10 MiB |
+| Decoded source | ≤ 12 megapixels |
+| Processed width | ≤ 1 600 px |
+| Processed longest side | ≤ 2 600 px |
+
+### Receipt types
+
+- Checkout screenshots from **Blinkit**, **Swiggy**, and **Zepto**
+- INR-denominated receipts with payment labels in English or Devanagari script
+
+### Currency
+
+**INR only.** The recognition pipeline is tuned for Indian rupee currency markers (₹, Rs., INR).
+Passing `currency="USD"` or any other non-INR value raises `ConfigurationError` immediately.
+
+INR is the only production-scope currency. Other currencies are not recognized in the current
+runtime baseline.
+
+### Output
+
+The package produces a **payable-total suggestion only**:
+
+- The amount the customer owes (from "to pay", "amount payable", etc.)
+- The currency code (`"INR"`)
+- An evidence grade and corroborating metadata
+
+## Not supported
+
+The following are explicitly outside the current scope. Submitting an image that falls into these
+categories will not raise an error — it will return `evidence_grade="none"` or an unreliable
+`"review"` result.
+
+### File formats not supported
+
+- **PDF** — single-page or multi-page
+- **HEIC / HEIF**
+- **TIFF**
+- **Animated GIF or WebP**
+
+### Receipt types not supported
+
+- Handwritten receipts
+- Scanned physical paper receipts (low-quality scans may fail)
+- Multi-page receipts
+- Non-Blinkit/Swiggy/Zepto checkout flows (may work incidentally but are not tested)
+
+### Data extraction not supported
+
+- **Line-item extraction** — individual products, quantities, prices
+- **Merchant name extraction** — store name, branch, address
+- **Date / time extraction** — transaction timestamp
+- **GST / tax breakdown** — tax components are visible but not returned as structured fields
+
+### Infrastructure not supported
+
+- **Receipt storage** — the package produces an in-process result only; no database writes
+- **Authentication / authorization** — caller responsibility
+- **HTTP server or REST API** — the package is a library, not a service
+- **Currencies other than INR** — USD, EUR, GBP, etc. are not production-scope
+
+### Platform not supported as conformance target
+
+- **ARM (Apple Silicon, Raspberry Pi, etc.)** — runs in development mode; not conformance-tested
+- **Windows** — not tested
+- **Tesseract versions other than 5.3.4** — the package runs but sets `conformant=false`
+
+## Scope and the v1 gate
+
+The v1 accuracy gate covers only Blinkit, Swiggy, and Zepto checkout screenshots in INR, on the
+retained Ubuntu 24.04 / amd64 / tesseract 5.3.4 runtime. Meeting the gate on that corpus does not
+imply the package will perform identically on other receipt types, apps, or currencies.
+
+See [Release gate](/docs/development/release-gate) for the full checklist.

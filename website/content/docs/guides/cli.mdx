@@ -1,0 +1,142 @@
+---
+title: CLI Guide
+description: Run payable-receipt-ocr from the command line — flags, output format, and exit codes.
+---
+
+## Basic usage
+
+```bash
+payable-receipt-ocr receipt.png --currency INR
+```
+
+The CLI outputs compact JSON to stdout and exits 0 on success. On error, a message is written to
+stderr and the process exits with a non-zero code. No JSON is printed on error.
+
+## All flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `image` | (required) | JPG, JPEG, PNG, or WebP receipt image path |
+| `--currency` | `INR` | ISO currency; only `INR` is currently supported |
+| `--tessdata-dir` | (auto) | Directory containing `eng.traineddata` and `Devanagari.traineddata` |
+| `--pass-timeout` | `2.0` | Maximum seconds per Tesseract pass |
+| `--deadline` | `5.0` | Maximum total wall time in seconds |
+| `--runtime-policy` | `development` | `development` or `conformant` |
+| `--diagnostics` | off | Include raw OCR text in output (sensitive — see below) |
+
+## Output format
+
+The output is always a single JSON object on stdout. The `schema_version` field is `"payable-receipt-ocr/1"`.
+
+### Successful recognition
+
+```bash
+payable-receipt-ocr zepto-checkout.png --currency INR
+```
+
+```json
+{
+  "schema_version":"payable-receipt-ocr/1",
+  "source":{"filename":"zepto-checkout.png","dimensions":[1080,1920]},
+  "processing":{"passes_planned":12,"passes_completed":10,"passes_failed":0,"degraded":false,"deadline_exceeded":false,"duration_ms":2843},
+  "runtime":{"baseline_id":"linux-noble-amd64-2026-08","conformant":false,"tesseract_version":"tesseract 5.5.0","model_sha256":{"Devanagari":"3bbb87c1...c12b7","eng":"7d4322bd...170b2"}},
+  "result":{"total":"289.86","currency":"INR","evidence_grade":"strong","requires_confirmation":true,"authorizes_persistence":false,"matched_label":"to pay","label_kind":"payment"},
+  "warnings":[]
+}
+```
+
+`requires_confirmation` and `authorizes_persistence` are always `true` and `false` respectively,
+even in the CLI output.
+
+### No total found
+
+When no total can be extracted, the result is still valid JSON with `evidence_grade: "none"` and
+`total: null`:
+
+```json
+{
+  "result": {
+    "total": null,
+    "currency": null,
+    "evidence_grade": "none",
+    "requires_confirmation": true,
+    "authorizes_persistence": false,
+    "matched_label": null,
+    "label_kind": null
+  },
+  "warnings": [{"code": "no_candidate", "message": "No payment or fallback total label with a monetary value was extracted."}]
+}
+```
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success — JSON result on stdout |
+| `1` | Unexpected error |
+| `3` | `input_file` — image path not found or unreadable |
+| `4` | `unsupported_image` — format, file size, or pixel count outside limits |
+| `5` | `configuration` / `runtime_baseline` — invalid arguments, Tesseract missing, model issue, or conformant runtime mismatch |
+| `6` | `ocr_engine` — all OCR passes failed or none completed before the deadline |
+
+## Diagnostics flag
+
+<Callout type="warn" title="Sensitive output">
+  `--diagnostics` includes the full recognized receipt text from every OCR pass, line-level
+  bounding boxes, and the ranked candidate list. This output can contain amounts, names, and other
+  personal information visible on the receipt. Do not log or transmit diagnostic output without
+  treating it with the same care as the receipt image itself.
+</Callout>
+
+```bash
+payable-receipt-ocr receipt.png --currency INR --diagnostics
+```
+
+The output gains a `"diagnostics"` key containing per-pass OCR text and candidates.
+
+## Runtime policy flag
+
+In development (default), the CLI continues even if the local runtime does not match the
+conformance baseline:
+
+```bash
+payable-receipt-ocr receipt.png --currency INR --runtime-policy development
+# result.runtime.conformant may be false — this is normal on macOS
+```
+
+To fail closed when the runtime does not match (used for conformant evaluation runs):
+
+```bash
+payable-receipt-ocr receipt.png --currency INR --runtime-policy conformant
+# exits 5 if OS/arch/tesseract version do not match the baseline
+```
+
+## Parsing output in shell scripts
+
+Use `jq` to extract fields:
+
+```bash
+output=$(payable-receipt-ocr receipt.png --currency INR)
+exit_code=$?
+
+if [ $exit_code -ne 0 ]; then
+  echo "OCR failed with exit $exit_code" >&2
+  exit $exit_code
+fi
+
+grade=$(echo "$output" | jq -r '.result.evidence_grade')
+total=$(echo "$output" | jq -r '.result.total')
+
+echo "Grade: $grade, Total: $total"
+# Always prompt a human for confirmation before saving
+```
+
+## Benchmarking
+
+For measuring latency across multiple images, use `tools/benchmark.py`:
+
+```bash
+python tools/benchmark.py tests/fixtures/*.png --repetitions 3
+```
+
+See [Experimentation workflow](/docs/development/experimentation) for details.

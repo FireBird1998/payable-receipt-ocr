@@ -1,0 +1,108 @@
+---
+title: Recognition Pipeline
+description: How payable-receipt-ocr reads an image and produces a suggested total — step by step.
+---
+
+`payable-receipt-ocr` separates image preparation, OCR scheduling, and interpretation. Each stage
+is implemented in a private module. The public API surface — `recognize()` and `RecognitionResult`
+— stays stable regardless of internal changes.
+
+## Call direction
+
+```
+recognize()                    [api.py — public]
+  └─► process_receipt()        [_engine.py — private orchestrator]
+        ├─► load_source_image
+        │   prepare_variants   [_image.py]
+        ├─► validate_runtime   [_runtime.py]
+        ├─► build_schedule
+        │   execute_schedule   [_ocr.py]
+        └─► interpret          [_interpretation.py]
+              └─ typed records  [_contracts.py]
+```
+
+The CLI (`cli.py`) is a thin adapter that calls `recognize()` and serializes `result.to_dict()`.
+
+## Stage 1: Image loading and preprocessing (`_image`)
+
+Pillow loads the image and corrects EXIF orientation. OpenCV then:
+
+1. Detects skew via Hough line detection and rotates to deskew.
+2. Normalizes contrast.
+3. Produces two image variants:
+
+| Variant | Processing |
+|---|---|
+| `normalized-grayscale` | Contrast-normalized grayscale with 24 px white padding |
+| `adaptive-threshold` | Gaussian adaptive-threshold binarization with 24 px white padding |
+
+Both variants are scaled to fit within 1 600 px wide, 2 600 px on the longest side, and 4.5 MP.
+
+Input limits are enforced here: files above 10 MiB or decoded sources above 12 megapixels raise
+`UnsupportedImageError`.
+
+## Stage 2: Runtime validation (`_runtime`)
+
+Before any OCR runs, `validate_runtime` discovers the model directory (explicit → env → XDG),
+checksums both model files against the pinned SHA-256 values in `runtime-baseline.toml`, and
+checks the OS / arch / Tesseract version tuple.
+
+A model mismatch always raises `RuntimeBaselineError`. A runtime tuple mismatch raises it only
+under `runtime_policy="conformant"`.
+
+## Stage 3: OCR scheduling and execution (`_ocr`)
+
+The engine runs OCR in adaptive passes:
+
+**Baseline schedule (always runs):**
+
+```
+normalized-grayscale × {eng, Devanagari} × {psm 6, psm 4}  =  4 passes
+```
+
+After the baseline, if the grade is not `"strong"` and time remains, the remainder runs:
+
+```
+adaptive-threshold   × {eng, Devanagari} × {psm 6, psm 4}  =  4 passes
+normalized-grayscale × {eng, Devanagari} × {psm 11}         =  2 passes
+adaptive-threshold   × {eng, Devanagari} × {psm 11}         =  2 passes
+                                                  total ≤ 12 passes
+```
+
+This gives: **up to 2 image variants × 2 languages × 3 page layouts = at most 12 passes**.
+
+Each pass runs sequentially, respecting both `pass_timeout_seconds` (per-pass limit) and
+`deadline_seconds` (total wall-time limit). Tesseract receives `OMP_THREAD_LIMIT=1`; it does not
+use the caller's process environment.
+
+Each pass writes a prepared variant to a uniquely named PNG under `TMPDIR`, invokes Tesseract,
+parses TSV output, and deletes the PNG in a `finally` block.
+
+## Stage 4: Interpretation and evidence grading (`_interpretation`)
+
+Receives all completed pass results. For each line in each pass:
+
+- Extracts monetary candidates matching INR markers (₹, Rs., INR).
+- Classifies lines by label: **payment** (`to pay`, `amount payable`, etc.), **fallback total**
+  (`total`, `grand total`, etc.), **component** (subtotal, delivery fee, discount, etc.), or
+  unlabeled.
+- Scores candidates and aggregates cross-pass support.
+
+Payment labels outrank fallback totals. Discounts, savings, fees, cash, and change supply
+context instead of becoming the winning candidate.
+
+**Geometric row reconstruction** reconnects right-aligned prices with their left-aligned labels —
+this is what distinguishes "₹289.86" next to "to pay" from a stray price in a different row.
+
+The final `evidence_grade` is determined by strict corroboration criteria. See
+[Evidence grades and corroboration](/docs/concepts/evidence-grades).
+
+## No concurrency inside the pipeline
+
+The engine sets `max_workers=1`. All 12 passes run sequentially in the calling thread. The
+service layer is responsible for concurrent recognition across multiple images.
+
+## No state between calls
+
+Each `recognize()` call is completely independent. There is no cache, connection pool, or session.
+Prepared variants exist only as short-lived files in `TMPDIR` during a single call.

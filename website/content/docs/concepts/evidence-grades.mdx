@@ -1,0 +1,91 @@
+---
+title: Evidence Grades and Corroboration
+description: How strong, review, and none grades are determined — and what they mean for your application.
+---
+
+## The three grades
+
+| Grade | Meaning | `total` | `currency` |
+|---|---|---|---|
+| `"strong"` | Payment-labelled, INR-confirmed, multi-pass agreement, no conflicts | non-null | non-null |
+| `"review"` | A total was found but did not meet all corroboration criteria | non-null | non-null |
+| `"none"` | No supported total could be extracted | `null` | `null` |
+
+**Important:** `"strong"` evidence still requires human confirmation. It is not write permission.
+`result.requires_confirmation` is `True` for every grade. `result.authorizes_persistence` is
+`False` for every grade.
+
+## What `"strong"` requires
+
+All of the following must hold simultaneously:
+
+1. **Payment label** — the winning candidate was anchored to a recognized payment label
+   (`label_kind == "payment"`), not a fallback total.
+2. **No competing total** — no other candidate has equal or greater cross-pass support.
+3. **Explicit INR currency marker** — at least one pass returned a ₹, Rs., or INR marker adjacent
+   to the winning amount.
+4. **Not degraded** — no passes failed and the deadline was not reached.
+5. **No disqualifying warnings** — specifically, none of `ranking_warning`, `currency_conflict`,
+   or `competing_total`.
+6. **Cross-pass corroboration** — one of:
+   - Passes from **≥ 2 languages** with **≥ 3 total completed passes**, **or**
+   - **Arithmetic corroboration** from ≥ 2 passes (component amounts sum to the total within
+     tolerance).
+
+If any single criterion fails, the grade drops to `"review"`.
+
+## What degrades to `"review"`
+
+Any of the following produces `"review"` instead of `"strong"`:
+
+- Only one language produced results (e.g., all Devanagari passes timed out)
+- A competing total label has equal or greater support
+- A pass failed or the deadline was reached (`degraded=True`)
+- A `ranking_warning` or `currency_conflict` warning was generated
+- The label was a fallback total (`label_kind == "fallback"`) rather than a payment label
+
+## What produces `"none"`
+
+When no monetary candidate survives candidate ranking at all, the grade is `"none"` and both
+`total` and `currency` are `null`. This typically means:
+
+- The image is not a recognized receipt type
+- The image is too blurry or low-contrast for Tesseract
+- The receipt uses a format outside the supported scope (PDF, handwriting, etc.)
+
+A `no_candidate` warning is always present when `evidence_grade == "none"`.
+
+## Payment labels vs. fallback totals
+
+The interpretation stage distinguishes two label kinds:
+
+**Payment labels** (`label_kind == "payment"`)
+
+Recognized phrases like "to pay", "amount payable", "you pay", "net payable", etc. These
+specifically indicate the amount the customer owes and outrank fallback totals.
+
+**Fallback totals** (`label_kind == "fallback"`)
+
+Generic phrases like "total", "grand total", "bill total". These are used when no payment label
+is found. A fallback-total-anchored result can still be `"review"` grade but cannot be `"strong"`.
+
+## Warning codes that affect grade
+
+| Code | Effect on grade |
+|---|---|
+| `ranking_warning` | Blocks `"strong"` (possible digit corruption) |
+| `currency_conflict` | Blocks `"strong"` (ambiguous currency marker) |
+| `competing_total` | Blocks `"strong"` (another candidate equally supported) |
+| `degraded_processing` | Caps at `"review"` (a pass failed or deadline reached) |
+| `weak_evidence` | Emitted alongside any non-strong result |
+| `no_candidate` | Emitted when `evidence_grade == "none"` |
+
+New warning codes may be added in additive updates. Consumers should not treat an unrecognized
+warning code as an error.
+
+## Arithmetic corroboration
+
+When multiple component amounts (subtotal, delivery fee, discount, etc.) are visible and their
+sum matches the winning total within a small tolerance across ≥ 2 passes, arithmetic corroboration
+is satisfied. This can promote a result to `"strong"` even when only one language model produced
+results, provided all other criteria hold.

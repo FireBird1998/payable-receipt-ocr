@@ -1,0 +1,74 @@
+---
+title: Installation
+description: Install payable-receipt-ocr and its Tesseract dependencies.
+---
+
+## Requirements
+
+- Python 3.10 or newer
+- Tesseract OCR executable on your `PATH`
+- `eng.traineddata` and `Devanagari.traineddata` model files (see [Tesseract setup](/docs/getting-started/tesseract-setup))
+
+The package does **not** download models at runtime. Models must be installed before any recognition
+call is made. Recognition fails closed with `RuntimeBaselineError` if either model is missing or
+its checksum does not match the pinned value.
+
+## Install Tesseract
+
+**macOS** (supported development environment; conformance target is Ubuntu 24.04 / amd64):
+
+```bash
+brew install tesseract
+```
+
+**Ubuntu / Debian:**
+
+```bash
+sudo apt-get update
+sudo apt-get install tesseract-ocr
+```
+
+## Install the Python package
+
+Install directly from the GitHub repository:
+
+```bash
+pip install git+https://github.com/FireBird1998/payable-receipt-ocr.git
+```
+
+## Install the Tesseract models
+
+After cloning the repository, run the setup script once. It downloads `eng.traineddata` and
+`Devanagari.traineddata` from the
+[`tessdata_fast`](https://github.com/tesseract-ocr/tessdata_fast) project (Apache 2.0), verifies
+their SHA-256 checksums, and stores them under the user data directory where the package finds
+them automatically:
+
+```bash
+git clone https://github.com/FireBird1998/payable-receipt-ocr.git
+cd payable-receipt-ocr
+./scripts/setup-models.sh
+```
+
+## Verify the installation
+
+```python
+from payable_receipt_ocr import recognize
+print("payable-receipt-ocr ready")
+```
+
+If Tesseract is not on `PATH` or the models are not installed, this import succeeds but the first
+`recognize()` call will raise `RuntimeBaselineError`. See
+[Tesseract setup](/docs/getting-started/tesseract-setup) for troubleshooting.
+
+## Development install
+
+To work on the library itself:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install --editable '.[dev]'
+./scripts/setup-models.sh
+```

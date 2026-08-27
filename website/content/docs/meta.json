@@ -1,0 +1,11 @@
+{
+  "title": "payable-receipt-ocr",
+  "pages": [
+    "index",
+    "getting-started",
+    "guides",
+    "concepts",
+    "reference",
+    "development"
+  ]
+}

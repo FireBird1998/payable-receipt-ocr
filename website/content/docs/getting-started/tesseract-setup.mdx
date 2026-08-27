@@ -1,0 +1,104 @@
+---
+title: Tesseract Setup
+description: Install and configure the Tesseract OCR models required by payable-receipt-ocr.
+---
+
+INR recognition requires two Tesseract model files:
+
+- `eng.traineddata` — English script
+- `Devanagari.traineddata` — Devanagari script (for Hindi labels common on Indian receipts)
+
+Both come from the Apache 2.0-licensed [`tessdata_fast`](https://github.com/tesseract-ocr/tessdata_fast)
+project. The package pins their SHA-256 checksums and refuses to run if the files are missing or
+do not match.
+
+## Quick setup (recommended)
+
+Run the setup script from the cloned repository. It downloads, checksums, and installs both
+models:
+
+```bash
+./scripts/setup-models.sh
+```
+
+The script places the files under the XDG user data directory:
+
+```
+~/.local/share/payable-receipt-ocr/tessdata/
+```
+
+The package discovers this directory automatically on Linux and macOS.
+
+## Custom model directory
+
+If you need to use a different path, supply it explicitly at call time:
+
+```python
+result = recognize("receipt.png", tessdata_dir="/opt/tessdata")
+```
+
+Or set the environment variable before the process starts:
+
+```bash
+export PAYABLE_RECEIPT_OCR_TESSDATA_DIR=/absolute/path/to/tessdata
+payable-receipt-ocr receipt.png --currency INR
+```
+
+From the CLI:
+
+```bash
+payable-receipt-ocr receipt.png --currency INR \
+  --tessdata-dir /opt/tessdata
+```
+
+## Model discovery order
+
+The package resolves the tessdata directory in this order:
+
+1. Explicit `tessdata_dir` argument to `recognize()` (or `--tessdata-dir` on the CLI)
+2. `PAYABLE_RECEIPT_OCR_TESSDATA_DIR` environment variable
+3. `~/.local/share/payable-receipt-ocr/tessdata` (XDG data home)
+
+## Checksum verification
+
+On every `recognize()` call, both model files are checksummed against the pinned values in
+`runtime-baseline.toml`:
+
+| Model | SHA-256 |
+|---|---|
+| `eng.traineddata` | `7d4322bd...170b2` |
+| `Devanagari.traineddata` | `3bbb87c1...c12b7` |
+
+A mismatch raises `RuntimeBaselineError` and no recognition is attempted. This prevents silent
+accuracy degradation from model version drift.
+
+## Runtime environments
+
+| Environment | Status |
+|---|---|
+| Ubuntu 24.04 / amd64 / tesseract 5.3.4 | Conformance target (`baseline_id = linux-noble-amd64-2026-08`) |
+| macOS (Homebrew tesseract) | Supported for development; not the conformance target |
+| Other Linux, ARM, other tesseract versions | Will run in `development` policy; `conformant=false` in result |
+
+<Callout type="warn">
+  Latency figures, p95 deadline claims, and accuracy measurements are only valid on the retained
+  conformance runtime. Results on development environments (including macOS) are useful for
+  iteration but do not constitute conformant evaluation.
+</Callout>
+
+## Troubleshooting
+
+**`RuntimeBaselineError: model file not found`**
+
+The model files were not found in any of the three discovery locations. Run `./scripts/setup-models.sh`
+or set `PAYABLE_RECEIPT_OCR_TESSDATA_DIR`.
+
+**`RuntimeBaselineError: checksum mismatch`**
+
+The model files exist but their SHA-256 hashes do not match the pinned values. Re-run
+`./scripts/setup-models.sh` to download the correct versions.
+
+**`RuntimeBaselineError: Tesseract is not installed or not on PATH`**
+
+The `tesseract` executable is not on `PATH`. Install Tesseract with your package manager and
+verify with `tesseract --version`.

@@ -1,0 +1,9 @@
+{
+  "title": "Guides",
+  "pages": [
+    "python-api",
+    "cli",
+    "handling-results",
+    "diagnostics-privacy"
+  ]
+}

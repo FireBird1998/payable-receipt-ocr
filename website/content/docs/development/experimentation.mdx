@@ -1,0 +1,165 @@
+---
+title: Experimentation Workflow
+description: A repeatable loop for testing hypotheses, benchmarking, and evaluating accuracy improvements.
+---
+
+Experimentation means making a change to the pipeline and measuring its effect on accuracy or
+latency before declaring it part of the baseline. This page describes a practical, repeatable loop.
+
+<Callout type="warn" title="Private data rules">
+  Never commit real receipt images to this repository. Never commit holdout evaluation reports,
+  even if they contain only aggregate metrics. Keep all private corpus files in private storage.
+  Only aggregate numbers (exact match rate, p95 latency, false-strong count) may be published.
+</Callout>
+
+## The experimentation loop
+
+### 1. Define the hypothesis
+
+State what you expect to change and why. Example:
+
+> "Increasing contrast normalization threshold from X to Y will improve candidate extraction
+> on Zepto dark-mode screenshots."
+
+Write this down before running any code. Bias from looking at results first corrupts the signal.
+
+### 2. Add synthetic or authorized private cases
+
+If the condition can be reproduced synthetically, add a fixture to `tests/fixtures/` and describe
+it in `tests/fixtures/README.md`.
+
+If you have authorized private receipts (collected with explicit consent), keep them in private
+storage only. Reference them via a manifest for holdout evaluation — never commit them.
+
+### 3. Run portable tests
+
+Verify your change does not break existing contracts:
+
+```bash
+pytest -m 'not integration'
+```
+
+Fix any failures before continuing.
+
+### 4. Run integration tests
+
+Verify the full pipeline behaves correctly with Tesseract:
+
+```bash
+pytest -m integration
+```
+
+### 5. Benchmark on the development runtime
+
+Use `tools/benchmark.py` to measure latency on your local images. This gives you a relative
+signal, not a conformant measurement:
+
+```bash
+python tools/benchmark.py tests/fixtures/*.png \
+  --repetitions 5 \
+  --runtime-policy development
+```
+
+The output is JSON with p50, p95, and p99 latency across all runs. The
+`environment_eligibility.eligible_for_conformance_reporting` field will be `false` on macOS or
+any non-baseline runtime.
+
+### 6. Benchmark on the retained conformance runtime
+
+For measurements that count toward the v1 gate, run on the retained Ubuntu 24.04 / amd64 /
+tesseract 5.3.4 instance with `--runtime-policy conformant`:
+
+```bash
+python tools/benchmark.py tests/fixtures/*.png \
+  --repetitions 5 \
+  --runtime-policy conformant
+```
+
+`eligible_for_conformance_reporting` will be `true` only when all runs are conformant. Record the
+p95 result.
+
+### 7. Run the private holdout evaluator (conformant runtime only)
+
+The holdout evaluator is only meaningful on the retained conformance runtime with a frozen,
+authorized private corpus:
+
+```bash
+python tools/holdout/evaluate.py \
+  --manifest /private/corpus/manifest.json \
+  --corpus-root /private/corpus/images/ \
+  --output /private/reports/run-YYYY-MM-DD.json
+```
+
+For dry runs on a development runtime (result is ineligible but useful for debugging):
+
+```bash
+python tools/holdout/evaluate.py \
+  --manifest /private/corpus/manifest.json \
+  --corpus-root /private/corpus/images/ \
+  --output /private/reports/dry-run.json \
+  --allow-development-runtime
+```
+
+Exit codes: `0` = gate passed, `1` = gate failed, `2` = manifest error.
+
+### 8. Inspect aggregates
+
+Check the report's `aggregates` section:
+
+```json
+{
+  "exact_match_rate": 0.961,
+  "false_strong_count": 0,
+  "confirmation_rate": 1.0,
+  "p95_duration_ms": 3210,
+  "gates": {
+    "eligible": true,
+    "exact_amount_currency_rate_min_0_95": true,
+    "false_strong_count_zero": true,
+    "confirmation_rate_eq_1_0": true,
+    "p95_duration_ms_lt_5000": true
+  },
+  "gate_passed": true
+}
+```
+
+An ineligible run (`eligible: false`) means the evaluation did not run on the conformant runtime
+with a fully conformant baseline — it cannot count toward the gate.
+
+### 9. Document baseline-affecting decisions
+
+If the change affects the model files, pass schedule, preprocessing, or grading logic, record it
+in an ADR under `docs/adr/`. Changes to these areas require a new holdout evaluation run before
+the new baseline is declared conformant.
+
+See [CONTRIBUTING.md](https://github.com/FireBird1998/payable-receipt-ocr/blob/main/CONTRIBUTING.md)
+for the full list of baseline-affecting changes.
+
+## Benchmark output format
+
+```json
+{
+  "tool": "payable-receipt-ocr benchmark",
+  "runtime_policy": "development",
+  "repetitions": 3,
+  "durations": {
+    "count": 9,
+    "p50_ms": 2410,
+    "p95_ms": 3870,
+    "p99_ms": 4200
+  },
+  "environment_eligibility": {
+    "eligible_for_conformance_reporting": false,
+    "runtime_baseline_ids": ["linux-noble-amd64-2026-08"]
+  },
+  "runs": [...]
+}
+```
+
+## What not to do
+
+- Do not commit private receipts to this repository under any name or path.
+- Do not commit holdout evaluation reports (even aggregate-only ones) to the public repository.
+- Do not use macOS benchmark numbers as evidence for the v1 gate.
+- Do not run the holdout evaluator on a development-policy runtime and treat the result as
+  eligible — the evaluator will set `eligible: false` and the gate check will fail.

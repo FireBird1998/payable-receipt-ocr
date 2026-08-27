@@ -1,0 +1,149 @@
+---
+title: Errors and CLI Exits
+description: Controlled error classes, error codes, CLI exit codes, and when each is raised.
+---
+
+## Error hierarchy
+
+All controlled errors inherit from `ReceiptOcrError`. Catching the base class handles every
+controlled failure:
+
+```python
+from payable_receipt_ocr.errors import (
+    ReceiptOcrError,       # base class
+    InputFileError,        # exit 3
+    UnsupportedImageError, # exit 4
+    ConfigurationError,    # exit 5
+    RuntimeBaselineError,  # exit 5 (subclass of ConfigurationError)
+    OcrEngineError,        # exit 6
+)
+```
+
+## Error reference
+
+| Class | Code | CLI exit | When raised |
+|---|---|---|---|
+| `InputFileError` | `input_file` | 3 | Image path does not exist or is not readable |
+| `UnsupportedImageError` | `unsupported_image` | 4 | Unsupported format; file > 10 MiB; decoded > 12 MP |
+| `ConfigurationError` | `configuration` | 5 | Invalid `currency` or `runtime_policy` argument |
+| `RuntimeBaselineError` | `runtime_baseline` | 5 | Tesseract not found; missing models; checksum mismatch; or conformant policy + runtime mismatch |
+| `OcrEngineError` | `ocr_engine` | 6 | All OCR passes failed or none completed before the deadline |
+| Unexpected | — | 1 | Unhandled exception (CLI only) |
+
+`RuntimeBaselineError` is a subclass of `ConfigurationError` and shares exit code 5.
+
+## CLI exit codes
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Success — JSON result on stdout |
+| `1` | Unexpected error (defensive catch-all) |
+| `3` | `input_file` error |
+| `4` | `unsupported_image` error |
+| `5` | `configuration` or `runtime_baseline` error |
+| `6` | `ocr_engine` error |
+
+On error, the CLI prints to stderr in the format:
+
+```
+payable-receipt-ocr [error_code]: human-readable message
+```
+
+No JSON is printed to stdout on error.
+
+## Holdout evaluator exit codes (separate contract)
+
+`tools/holdout/evaluate.py` uses additional exit codes that are not part of the main CLI
+contract:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Gate passed |
+| `1` | Gate failed (accuracy thresholds not met) |
+| `2` | Manifest parse error |
+
+## Python error handling
+
+### `InputFileError`
+
+```python
+try:
+    result = recognize("missing.png", currency="INR")
+except InputFileError as e:
+    # e.code == "input_file"
+    # e.exit_code == 3
+    print(f"Cannot read file: {e}")
+```
+
+Raised when the path does not resolve to a readable file. Resolution happens before any OCR.
+
+### `UnsupportedImageError`
+
+```python
+try:
+    result = recognize("huge.png", currency="INR")
+except UnsupportedImageError as e:
+    print(f"Image outside supported scope: {e}")
+```
+
+Raised when:
+- The file format is not JPG, JPEG, PNG, or WebP
+- The file size exceeds 10 MiB
+- The decoded source exceeds 12 megapixels
+
+### `ConfigurationError`
+
+```python
+try:
+    result = recognize("receipt.png", currency="USD")
+except ConfigurationError as e:
+    print(f"Configuration invalid: {e}")
+```
+
+Raised when `currency` is not `"INR"` or `runtime_policy` is not `"development"` or `"conformant"`.
+
+### `RuntimeBaselineError`
+
+```python
+from payable_receipt_ocr.errors import RuntimeBaselineError
+
+try:
+    result = recognize("receipt.png", currency="INR")
+except RuntimeBaselineError as e:
+    # Tesseract missing, model issue, or conformant policy + runtime mismatch
+    print(f"Runtime baseline error: {e}")
+    # Run ./scripts/setup-models.sh to install correct models
+```
+
+### `OcrEngineError`
+
+```python
+from payable_receipt_ocr.errors import OcrEngineError
+
+try:
+    result = recognize("receipt.png", currency="INR")
+except OcrEngineError as e:
+    print(f"All OCR passes failed or the deadline was reached: {e}")
+```
+
+Raised when every scheduled pass fails, or when no pass completes before the deadline.
+
+## Checking the error code
+
+All `ReceiptOcrError` subclasses expose a `code` attribute (stable string) and an `exit_code`
+attribute (integer). These are safe to branch on:
+
+```python
+try:
+    result = recognize("receipt.png", currency="INR")
+except ReceiptOcrError as e:
+    if e.code == "runtime_baseline":
+        # guide user to run setup-models.sh
+        pass
+    elif e.code == "input_file":
+        # file selection error
+        pass
+    else:
+        # fallback
+        pass
+```

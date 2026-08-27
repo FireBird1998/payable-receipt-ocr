@@ -1,0 +1,102 @@
+---
+title: Diagnostics and Privacy
+description: What diagnostic data contains, how to enable it, and how to handle receipt data safely.
+---
+
+## Default behaviour: no raw OCR text retained
+
+By default, `recognize()` retains no raw OCR text. The result object contains only the
+structured fields (total, currency, grade, warnings, runtime provenance).
+
+## Enabling diagnostics
+
+Pass `diagnostics=True` to `recognize()`:
+
+```python
+result = recognize("receipt.png", currency="INR", diagnostics=True)
+payload = result.to_dict(include_diagnostics=True)
+# payload["diagnostics"]["ocr"]["passes"][0]["raw_text"]  — full OCR text per pass
+```
+
+From the CLI:
+
+```bash
+payable-receipt-ocr receipt.png --currency INR --diagnostics
+```
+
+<Callout type="warn" title="Sensitive data">
+  Diagnostics contain the full recognized text from every completed OCR pass, line-level bounding
+  boxes, and the ranked candidate list. This data can include names, amounts, merchant text, and
+  other personal information visible on the receipt. Treat diagnostic output with the same care as
+  the receipt image itself.
+</Callout>
+
+## What diagnostics are not retained by default
+
+When `diagnostics=False` (the default):
+
+- No raw OCR text is stored in the result object.
+- Calling `result.to_dict(include_diagnostics=True)` on a result produced without `diagnostics=True`
+  raises `ValueError` rather than returning an incomplete payload.
+- Diagnostics cannot be recovered after the `recognize()` call returns.
+
+## Temporary files
+
+The package writes each prepared OCR image variant to a uniquely named PNG under the system
+temporary directory (`TMPDIR`) before invoking Tesseract, then deletes it in a `finally` block.
+
+Two caveats:
+
+1. **Process crash**: A crash before the `finally` block can leave prepared variants in `TMPDIR`.
+2. **Tesseract temporaries**: Tesseract may create additional temporary files of its own.
+
+For deployments where receipt-derived files must not touch persistent storage, point `TMPDIR` at
+a `tmpfs` or equivalent in-memory filesystem:
+
+```bash
+# Example: mount a tmpfs and redirect TMPDIR
+mount -t tmpfs tmpfs /mnt/ocr-tmp
+export TMPDIR=/mnt/ocr-tmp
+```
+
+## No network, no logs
+
+The package makes no HTTP, DNS, or socket operations. It does not emit Python `logging` records.
+No OCR text, candidate data, or receipt content is written to any log or transmitted to any
+external service.
+
+## Filename sensitivity
+
+`source.filename` in the result is the basename of the input image path. If the filename itself
+contains personal information (for example, `2026-08-user-name-blinkit.png`), scrub it before
+the result is logged, stored, or transmitted:
+
+```python
+payload = result.to_dict()
+payload["source"]["filename"] = "redacted.png"
+# Now safe to log
+```
+
+## Private holdout data
+
+The private holdout corpus and its evaluation reports must stay in private storage only. They must
+not appear in:
+
+- The public git repository or its history
+- CI artifacts or GitHub Actions logs
+- Published documentation
+
+Only aggregate metrics (exact match rate, p95 latency, false-strong count) may be published.
+Reports never contain image filenames, image bytes, or OCR text.
+
+## Caller responsibilities
+
+The package produces an in-process result object. The caller is responsible for:
+
+- Upload authentication (if images are received from users)
+- Temporary-file deletion if `TMPDIR` is not a `tmpfs`
+- Log redaction (especially `source.filename` and diagnostic payloads)
+- Retention and deletion policies for stored results
+- Deciding when and how to surface suggestions to a human for confirmation
+
+The package does not enforce any of the above. Its scope ends at returning a `RecognitionResult`.
