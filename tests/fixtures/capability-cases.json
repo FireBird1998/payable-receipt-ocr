@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "id": "clean-screenshot",
+      "image": "clean-screenshot.png",
+      "expected_total": "1280.50",
+      "expected_currency": "INR",
+      "category": "payable-label"
+    },
+    {
+      "id": "multiple-totals",
+      "image": "multiple-totals.png",
+      "expected_total": "604.50",
+      "expected_currency": "INR",
+      "category": "competing-amounts"
+    },
+    {
+      "id": "wallet-after-total",
+      "image": "wallet-after-total.png",
+      "expected_total": "800.00",
+      "expected_currency": "INR",
+      "category": "competing-amounts"
+    },
+    {
+      "id": "cash-and-change",
+      "image": "cash-and-change.png",
+      "expected_total": "85.47",
+      "expected_currency": "INR",
+      "category": "competing-amounts"
+    },
+    {
+      "id": "zero-payable",
+      "image": "zero-payable.png",
+      "expected_total": "0.00",
+      "expected_currency": "INR",
+      "category": "zero-payable"
+    },
+    {
+      "id": "rupee-marker",
+      "image": "rupee-marker.png",
+      "expected_total": "638.00",
+      "expected_currency": "INR",
+      "category": "currency-marker"
+    },
+    {
+      "id": "savings-only",
+      "image": "savings-only.png",
+      "expected_total": null,
+      "expected_currency": null,
+      "category": "no-payable-evidence"
+    },
+    {
+      "id": "no-payable-label",
+      "image": "no-payable-label.png",
+      "expected_total": null,
+      "expected_currency": null,
+      "category": "no-payable-evidence"
+    }
+  ]
+}
