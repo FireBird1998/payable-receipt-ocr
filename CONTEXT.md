@@ -79,3 +79,18 @@ The property of a recognition call whose OS, architecture, and Tesseract version
 baseline tuple. Only conformant calls on the retained reference runtime are eligible for the
 accuracy gate.
 _Avoid_: Matching environment, compatible runtime
+
+**Payable policy**:
+The interpretation rules that determine whether a document presents a unique payable total,
+including how to handle zero, credits, missing totals and competing payment windows.
+_Avoid_: OCR confidence, payment authorization
+
+**Payable-field evidence**:
+The visible document region that supports a recognition suggestion as the final payable,
+rather than an unrelated field that happens to contain the same number.
+_Avoid_: Numeric match, confirmed expense
+
+**Negative control**:
+A document whose payable policy target is no suggestion because a unique payable total is
+absent or ambiguous. An execution error is not a successful abstention.
+_Avoid_: Zero-payable receipt, failed OCR

@@ -1,0 +1,118 @@
+{
+  "schema": "payable-ocr-evaluation/1",
+  "policy_version": "india-payable/1",
+  "corpus_version": "synthetic-protocol-v1",
+  "frozen_at": "2026-09-28T00:00:00Z",
+  "historical_manifests": [
+    {
+      "version": "synthetic-old-window",
+      "sha256": "aa4e81de7843b35ec7a0de033fd88bb79423f175b1784fae787557cacd9134ca"
+    }
+  ],
+  "cases": [
+    {
+      "id": "payable",
+      "image": "images/payable.png",
+      "image_sha256": "8585075b61a597663bb43baa76a336d192d350736576cf3bc2c79c8c6bf09e28",
+      "width": 300,
+      "height": 120,
+      "family": "retail",
+      "language": "en",
+      "capture_type": "screenshot",
+      "provenance": "synthetic",
+      "split": "development",
+      "transaction_group": "payable",
+      "near_duplicate_group": "payable",
+      "label_reference": "synthetic-fixture-v1",
+      "expected": {
+        "total": "12.50",
+        "currency": "INR",
+        "source_region": [
+          20,
+          60,
+          240,
+          80
+        ],
+        "role": "final-payable",
+        "negative_reason": null
+      }
+    },
+    {
+      "id": "zero",
+      "image": "images/zero.png",
+      "image_sha256": "ce90869f6c2e6ae493ad9cabaa5c100ec86798a195f7b1ab6ba93282fa17f9f8",
+      "width": 300,
+      "height": 120,
+      "family": "utility",
+      "language": "en",
+      "capture_type": "screenshot",
+      "provenance": "synthetic",
+      "split": "development",
+      "transaction_group": "zero",
+      "near_duplicate_group": "zero",
+      "label_reference": "synthetic-fixture-v1",
+      "expected": {
+        "total": "0.00",
+        "currency": "INR",
+        "source_region": [
+          20,
+          60,
+          240,
+          80
+        ],
+        "role": "final-payable",
+        "negative_reason": null
+      }
+    },
+    {
+      "id": "date-window",
+      "image": "images/date-window.png",
+      "image_sha256": "81f70cef88dccf0e73a48c4c0685ffe6370e5f1bbc8168acf1847927e9ce0bc5",
+      "width": 300,
+      "height": 120,
+      "family": "utility",
+      "language": "en",
+      "capture_type": "screenshot",
+      "provenance": "synthetic",
+      "split": "development",
+      "transaction_group": "date-window",
+      "near_duplicate_group": "date-window",
+      "label_reference": "synthetic-fixture-v1",
+      "expected": {
+        "total": null,
+        "currency": null,
+        "source_region": null,
+        "role": "no-payable",
+        "negative_reason": "ambiguous-due-date"
+      },
+      "historical_expected": {
+        "total": "12.50",
+        "currency": "INR",
+        "manifest_sha256": "aa4e81de7843b35ec7a0de033fd88bb79423f175b1784fae787557cacd9134ca"
+      }
+    },
+    {
+      "id": "credit",
+      "image": "images/credit.png",
+      "image_sha256": "153f9de865ac931b99a17f4ac1a7e1fbeb101843aeb220d99f6938e905b33584",
+      "width": 300,
+      "height": 120,
+      "family": "retail",
+      "language": "en",
+      "capture_type": "screenshot",
+      "provenance": "synthetic",
+      "split": "development",
+      "transaction_group": "credit",
+      "near_duplicate_group": "credit",
+      "label_reference": "synthetic-fixture-v1",
+      "expected": {
+        "total": null,
+        "currency": null,
+        "source_region": null,
+        "role": "no-payable",
+        "negative_reason": "credit"
+      }
+    }
+  ],
+  "manifest_sha256": "f45120354c1b0ef545ceb037cfaa8dc977ed30241f185c699e66ac17ec82e9db"
+}
