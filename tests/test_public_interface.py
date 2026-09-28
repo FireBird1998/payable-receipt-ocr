@@ -115,6 +115,10 @@ def test_decoded_image_limit_raises_unsupported_image_error(tmp_path: Path) -> N
     [
         ("clean-screenshot.png", "INR", Decimal("1280.50"), {"strong", "review"}),
         ("multiple-totals.png", "INR", Decimal("604.50"), {"strong", "review"}),
+        ("wallet-after-total.png", "INR", Decimal("800.00"), {"review"}),
+        ("cash-and-change.png", "INR", Decimal("85.47"), {"review"}),
+        ("zero-payable.png", "INR", Decimal("0.00"), {"strong", "review"}),
+        ("rupee-marker.png", "INR", Decimal("638.00"), {"strong", "review"}),
     ],
 )
 def test_synthetic_receipts_through_public_interface(
@@ -129,6 +133,22 @@ def test_synthetic_receipts_through_public_interface(
     assert result.total == expected_total
     assert result.currency == currency
     assert result.evidence_grade in expected_grades
+    assert result.requires_confirmation is True
+    assert result.authorizes_persistence is False
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not (HAS_TESSERACT and HAS_MODELS),
+    reason="Tesseract or required tessdata models are unavailable",
+)
+@pytest.mark.parametrize("filename", ["savings-only.png", "no-payable-label.png"])
+def test_images_without_payable_evidence_do_not_suggest_an_amount(filename: str) -> None:
+    result = recognize(FIXTURES / filename, currency="INR", runtime_policy="development")
+
+    assert result.total is None
+    assert result.currency is None
+    assert result.evidence_grade == "none"
     assert result.requires_confirmation is True
     assert result.authorizes_persistence is False
 

@@ -266,6 +266,9 @@ twine check dist/*
 Only synthetic fixtures are committed. See [CONTRIBUTING.md](CONTRIBUTING.md) before adding test
 data.
 
+To measure accuracy on your own receipts and save repeatable before/after reports, see
+[Testing OCR capability locally](docs/testing.md).
+
 ## License
 
 The package is available under the [MIT License](LICENSE). Its dependencies and optional trained
