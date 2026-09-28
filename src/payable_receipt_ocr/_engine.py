@@ -57,7 +57,7 @@ def process_receipt(
     baseline_interpretation = interpret(
         passes=baseline_run.completed,
         currency_context="INR",
-        degraded=baseline_run.failed > 0 or baseline_run.deadline_exceeded,
+        degraded=baseline_run.degraded,
         diagnostics=False,
     )
     should_extend = baseline_interpretation.evidence_grade != "strong"
@@ -67,6 +67,7 @@ def process_receipt(
     extended_warnings = list(baseline_run.warnings)
     deadline_exceeded = baseline_run.deadline_exceeded
     planned_total = baseline_run.planned
+    degraded = baseline_run.degraded
 
     if should_extend and not deadline_exceeded:
         remainder_schedule = build_schedule(include_adaptive=True, include_rescue=True)[
@@ -81,6 +82,7 @@ def process_receipt(
             omp_thread_limit=runtime.omp_thread_limit,
         )
         planned_total += remainder_run.planned
+        degraded = degraded or remainder_run.degraded
         extended_completed = extended_completed + remainder_run.completed
         extended_failed += remainder_run.failed
         extended_warnings.extend(remainder_run.warnings)
@@ -91,7 +93,6 @@ def process_receipt(
     if not extended_completed and deadline_exceeded:
         raise OcrEngineError("No OCR pass completed before the deadline.")
 
-    degraded = extended_failed > 0 or deadline_exceeded
     interpretation = interpret(
         passes=extended_completed,
         currency_context="INR",

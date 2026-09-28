@@ -59,8 +59,8 @@ is required for strong evidence but is not itself permission to persist an expen
 _Avoid_: Confidence, confirmation
 
 **Degraded recognition**:
-A recognition call in which at least one planned pass failed or the total deadline was reached
-before all passes completed. Degraded recognition caps the evidence grade at review.
+A recognition call in which at least one planned pass failed, unusable OCR records were discarded,
+or the total deadline was reached before all passes completed. Degraded recognition caps the evidence grade at review.
 _Avoid_: Partial failure, error state
 
 **Runtime baseline**:

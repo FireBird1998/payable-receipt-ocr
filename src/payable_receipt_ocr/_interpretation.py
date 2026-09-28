@@ -215,7 +215,7 @@ def _rank_warnings(
         warnings.append(
             OcrWarning(
                 code="degraded_processing",
-                message="Processing was degraded by pass failures or deadline pressure.",
+                message="Processing was degraded by pass failures, malformed OCR records, or deadline pressure.",
             )
         )
     if currency_context == "INR" and winner.currency != "INR":
