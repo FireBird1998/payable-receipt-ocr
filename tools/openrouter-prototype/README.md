@@ -30,7 +30,11 @@ Eight synthetic fixtures are available by default. Uploading an image adds an un
 - Results/uploads live in memory; the OCR worker briefly writes its prepared image to an automatically cleaned temporary directory. Download JSON explicitly to preserve results. Real-bill reports can contain sensitive extracted text: keep them outside Git, e.g. under ignored `output/`.
 - Localhost-only development server. Do not deploy it publicly.
 
-## Current verdict: pending live LLM benchmark
+## Live follow-up
+
+See [the first live report](RESULTS-2026-09-28.md): eleven successful model responses, one rate-limited attempt, and an incorrect 3.1 abstention. The comparison is incomplete; there is no production replacement verdict.
+
+## Initial smoke check (before connecting the key)
 
 On 2026-09-28, the actual browser-to-server local OCR run matched 6/6 payable fixtures and abstained correctly on 2/2 negative controls, with 0 errors; p50 1.49 s, p95 1.78 s on the local development machine. This verifies the local flow only. No key was supplied and no LLM receipt call was made during this initial check. No comparative accuracy or cost conclusion is established.
 
