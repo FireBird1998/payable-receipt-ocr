@@ -161,3 +161,43 @@ logical CPUs, RAM, OS, host identity and lack of emulation before any comparativ
 qualification run. Lock A/B/C configuration and all dependency/model hashes before
 exposing a new authorized holdout. This tool deliberately always reports
 `release_qualification: false`; ticket #23 implements the later complete gate.
+
+## Local Docker development and testing
+
+Docker is sufficient for local Linux development, regression tests and explicitly
+labelled exploratory comparisons. A dedicated amd64 machine is not a prerequisite
+for continuing those tasks. From the repository root:
+
+```sh
+bash tools/evaluation/docker/run.sh
+bash tools/evaluation/docker/run.sh python -m payable_receipt_ocr tests/fixtures/clean-screenshot.png --runtime-policy development
+```
+
+The helper builds for Docker's native architecture, then runs with networking disabled,
+two CPU cores of quota, 2 GiB memory, a read-only root filesystem and a temporary
+writable `/tmp`. Override quotas with `OCR_DOCKER_CPUS` and `OCR_DOCKER_MEMORY` and
+record those values with every comparison. Do not confuse the container's 2 GiB cap
+with the proposed 600 MiB per-process release target.
+
+The Ubuntu 24.04 base image is digest-pinned, Tesseract is pinned to 5.3.4-1build5,
+Python numerical/image/test packages are pinned, and OCR models are checksum-verified
+during build. The build allowlist includes source and synthetic fixtures; private
+inputs, historical snapshots, `.git`, credentials and local environments are excluded.
+Provisioning uses the network only during build. Receipt recognition runs offline.
+The image records resolved Python and OS packages in `/opt/python-packages.txt` and
+`/opt/os-packages.txt`. Retain its image ID and export it before treating a run as a
+frozen baseline; unpinned transitive apt/build dependencies can change on rebuild.
+
+```sh
+docker image inspect payable-ocr-dev:arm64 --format '{{.Id}}'
+docker save payable-ocr-dev:arm64 --output output/ocr-dev-arm64-image.tar
+```
+
+On this Apple Silicon machine, native Docker is Linux ARM64. An optional
+`OCR_DOCKER_PLATFORM=linux/amd64` build/run uses emulation here; it can exercise amd64
+compatibility but does not establish native-amd64 latency or memory performance.
+Record the host architecture and whether emulation was used outside the container;
+`uname -m` inside an emulated container is not proof of native hardware.
+[Docker documents these architecture and emulation constraints](https://docs.docker.com/build/building/multi-platform/).
+A future ARM64 release baseline is possible through a deliberate runtime decision and
+fresh qualification; the current amd64 release claim remains governed by the ADRs.

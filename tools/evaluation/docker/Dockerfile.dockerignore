@@ -1,0 +1,22 @@
+# Allowlist only source, tools and synthetic fixtures. Real bills never enter a layer.
+**
+!pyproject.toml
+!README.md
+!LICENSE
+!CONTRIBUTING.md
+!SECURITY.md
+!MANIFEST.in
+!src/
+!src/**
+!scripts/
+!scripts/setup-models.sh
+!tests/
+!tests/**
+!tools/
+!tools/benchmark.py
+!tools/holdout/
+!tools/holdout/evaluate.py
+!tools/evaluation/
+!tools/evaluation/**
+**/__pycache__/**
+**/*.pyc
