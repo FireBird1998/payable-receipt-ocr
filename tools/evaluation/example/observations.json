@@ -1,0 +1,251 @@
+{
+  "schema": "payable-ocr-observations/1",
+  "candidate": {
+    "id": "synthetic-replay",
+    "engine": "synthetic-replay-not-ocr",
+    "engine_version": "1",
+    "code_commit": "0000000000000000000000000000000000000000",
+    "model_sha256": {
+      "synthetic-fixture-not-a-model": "7fb7a90f58543ea6a264ddf97a4c5ce1cbf79b9730c3acd1a085ff2a69628793"
+    },
+    "settings": {
+      "simulated": true,
+      "evidence_iou_threshold": 0.5
+    },
+    "environment": {
+      "kind": "development",
+      "os": "synthetic-not-measured",
+      "arch": "synthetic",
+      "cpu_model": "synthetic-not-measured",
+      "logical_cpus": 1,
+      "memory_bytes": 1,
+      "emulated": false,
+      "retained_host_id": null
+    }
+  },
+  "runs": [
+    {
+      "case_id": "payable",
+      "repetition": 0,
+      "total": "12.50",
+      "currency": "INR",
+      "grade": "review",
+      "error": null,
+      "source_region": [
+        20,
+        60,
+        240,
+        80
+      ],
+      "source_role": "final-payable",
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "payable",
+      "repetition": 1,
+      "total": "12.50",
+      "currency": "INR",
+      "grade": "review",
+      "error": null,
+      "source_region": [
+        20,
+        60,
+        240,
+        80
+      ],
+      "source_role": "final-payable",
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "payable",
+      "repetition": 2,
+      "total": "12.50",
+      "currency": "INR",
+      "grade": "review",
+      "error": null,
+      "source_region": [
+        20,
+        60,
+        240,
+        80
+      ],
+      "source_role": "final-payable",
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "zero",
+      "repetition": 0,
+      "total": "0.00",
+      "currency": "INR",
+      "grade": "strong",
+      "error": null,
+      "source_region": [
+        20,
+        20,
+        240,
+        40
+      ],
+      "source_role": "other",
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "zero",
+      "repetition": 1,
+      "total": "0.00",
+      "currency": "INR",
+      "grade": "strong",
+      "error": null,
+      "source_region": [
+        20,
+        20,
+        240,
+        40
+      ],
+      "source_role": "other",
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "zero",
+      "repetition": 2,
+      "total": "0.00",
+      "currency": "INR",
+      "grade": "strong",
+      "error": null,
+      "source_region": [
+        20,
+        20,
+        240,
+        40
+      ],
+      "source_role": "other",
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "date-window",
+      "repetition": 0,
+      "total": null,
+      "currency": null,
+      "grade": "none",
+      "error": null,
+      "source_region": null,
+      "source_role": null,
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "date-window",
+      "repetition": 1,
+      "total": null,
+      "currency": null,
+      "grade": "none",
+      "error": null,
+      "source_region": null,
+      "source_role": null,
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "date-window",
+      "repetition": 2,
+      "total": null,
+      "currency": null,
+      "grade": "none",
+      "error": null,
+      "source_region": null,
+      "source_role": null,
+      "requires_confirmation": true,
+      "authorizes_persistence": false,
+      "duration_ms": 100,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "credit",
+      "repetition": 0,
+      "total": null,
+      "currency": null,
+      "grade": "none",
+      "error": "controlled",
+      "source_region": null,
+      "source_role": null,
+      "requires_confirmation": null,
+      "authorizes_persistence": null,
+      "duration_ms": 9000,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "credit",
+      "repetition": 1,
+      "total": null,
+      "currency": null,
+      "grade": "none",
+      "error": "controlled",
+      "source_region": null,
+      "source_role": null,
+      "requires_confirmation": null,
+      "authorizes_persistence": null,
+      "duration_ms": 9000,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    },
+    {
+      "case_id": "credit",
+      "repetition": 2,
+      "total": null,
+      "currency": null,
+      "grade": "none",
+      "error": "controlled",
+      "source_region": null,
+      "source_role": null,
+      "requires_confirmation": null,
+      "authorizes_persistence": null,
+      "duration_ms": 9000,
+      "initialization_ms": null,
+      "process_peak_mib": null,
+      "process_tree_peak_mib": null
+    }
+  ],
+  "manifest_sha256": "f45120354c1b0ef545ceb037cfaa8dc977ed30241f185c699e66ac17ec82e9db"
+}
