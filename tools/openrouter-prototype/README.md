@@ -20,7 +20,7 @@ Eight synthetic fixtures are available by default. Uploading an image adds an un
 
 ## Measurements and limits
 
-- Gemini 3.1 Flash-Lite and Gemini 2.5 Flash-Lite availability/prices are read from the live OpenRouter catalogue.
+- Gemini 3.1 Flash-Lite availability/prices are read from the live OpenRouter catalogue. Gemini 2.5 Flash-Lite was removed from selection at the user's request after the first benchmark; historical results remain intact.
 - Identical prepared PNG pixels go to each selected engine: EXIF orientation is applied, RGB conversion and metadata removal occur, and resolution is preserved. Inputs are bounded to 10 MiB / 12 megapixels.
 - LLM settings: temperature 0, reasoning disabled, 768 output-token limit, strict JSON schema. No local OCR output or ground truth is sent in the LLM prompt.
 - Amount and currency exact matches, negative-control abstentions, request failures, all-call p50/p95 wall time, actual `usage.cost`, token counts, generation IDs, prompt hash and image hash appear in the report. Repeats increase call counts, not independent image counts.

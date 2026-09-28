@@ -21,7 +21,8 @@ function render(state) {
   const sig = JSON.stringify(state.models);
   if (sig !== modelSignature) {
     modelSignature = sig; $('models').replaceChildren();
-    state.models.forEach((m,index)=>{
+    // Keep the active memory-only session usable without restarting it.
+    state.models.filter(m=>m.id==='google/gemini-3.1-flash-lite').forEach((m,index)=>{
       const label=node('label',undefined,'choice'), input=node('input'); input.type='checkbox'; input.value=m.id; input.checked=index===0;
       const span=node('span'); span.append(node('b',engineName(m.id)),node('small',`$${(Number(m.pricing.prompt)*1e6).toFixed(2)}/M input · $${(Number(m.pricing.completion)*1e6).toFixed(2)}/M output`));
       label.append(input,span); $('models').append(label);
