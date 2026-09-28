@@ -63,6 +63,7 @@ class OcrPassResult:
     psm: int
     average_confidence: float
     lines: tuple[OcrLine, ...]
+    malformed_records: int = 0
 
 
 @dataclass(frozen=True)

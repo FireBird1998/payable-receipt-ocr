@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import csv
-import io
+import math
 import os
 import subprocess
 import tempfile
@@ -33,6 +32,14 @@ class OcrExecutionResult:
     failed: int
     warnings: tuple[OcrWarning, ...]
     deadline_exceeded: bool
+
+    @property
+    def degraded(self) -> bool:
+        return (
+            self.failed > 0
+            or self.deadline_exceeded
+            or any(ocr_pass.malformed_records for ocr_pass in self.completed)
+        )
 
 
 def build_schedule(*, include_adaptive: bool, include_rescue: bool) -> tuple[PlannedPass, ...]:
@@ -109,6 +116,14 @@ def execute_schedule(
             )
             continue
         completed.append(ocr_pass)
+        if ocr_pass.malformed_records:
+            warnings.append(
+                OcrWarning(
+                    code="ocr_malformed_records",
+                    message=f"Discarded {ocr_pass.malformed_records} malformed OCR records.",
+                    pass_id=current.pass_id,
+                )
+            )
     if deadline_exceeded:
         warnings.append(
             OcrWarning(
@@ -177,40 +192,15 @@ def _run_pass(
             detail = completed.stderr.strip().splitlines()
             message = detail[-1] if detail else "unknown Tesseract failure"
             raise OSError(f"Tesseract exited with status {completed.returncode}: {message}")
-        records = csv.DictReader(io.StringIO(completed.stdout), delimiter="\t")
-        data = list(records)
+        words, malformed_records = _parse_tsv(completed.stdout, image.shape[:2])
     finally:
         image_path.unlink(missing_ok=True)
 
     rows: list[dict[str, object]] = []
-    confidences: list[float] = []
-    for record in data:
-        raw_text = record.get("text") or ""
-        word = raw_text.strip()
-        if not word:
-            continue
-        try:
-            confidence = float(record.get("conf") or "-1")
-        except (TypeError, ValueError):
-            continue
-        if confidence < 0:
-            continue
-        try:
-            top = int(record.get("top") or "0")
-            height = int(record.get("height") or "0")
-            left = int(record.get("left") or "0")
-        except ValueError:
-            continue
-        word_payload = {
-            "text": word,
-            "confidence": confidence,
-            "left": left,
-            "top": top,
-            "bottom": top + height,
-            "center": top + (height / 2.0),
-        }
-        confidences.append(confidence)
-        _place_word(rows, word_payload)
+    confidences = [float(word["confidence"]) for word in words]
+    # Fix the processing order so TSV record order cannot change row membership.
+    for word in sorted(words, key=lambda item: (item["top"], item["left"], item["text"])):
+        _place_word(rows, word)
     lines: list[OcrLine] = []
     for row in sorted(rows, key=lambda item: item["top"]):
         row_words = sorted(row["words"], key=lambda item: item["left"])
@@ -231,6 +221,7 @@ def _run_pass(
         psm=psm,
         average_confidence=average,
         lines=tuple(lines),
+        malformed_records=malformed_records,
     )
 
 
@@ -238,15 +229,10 @@ def _place_word(rows: list[dict[str, object]], word: dict[str, object]) -> None:
     matching_row: Optional[dict[str, object]] = None
     best_distance = float("inf")
     for row in rows:
-        row_top = int(row["top"])
-        row_bottom = int(row["bottom"])
-        row_center = float(row["center"])
-        overlap = min(row_bottom, int(word["bottom"])) - max(row_top, int(word["top"]))
-        min_height = max(1, min(row_bottom - row_top, int(word["bottom"]) - int(word["top"])))
-        center_distance = abs(row_center - float(word["center"]))
-        grouped_row = overlap >= min_height * 0.35 or center_distance <= max(
-            10.0, min_height * 0.55
-        )
+        center_distance = abs(float(row["center"]) - float(word["center"]))
+        # Compatibility with every member prevents tall boxes and transitive
+        # overlap chains from expanding the row into unrelated receipt lines.
+        grouped_row = all(_same_row(member, word) for member in row["words"])
         if grouped_row and center_distance < best_distance:
             matching_row = row
             best_distance = center_distance
@@ -266,3 +252,89 @@ def _place_word(rows: list[dict[str, object]], word: dict[str, object]) -> None:
     matching_row["top"] = min(int(matching_row["top"]), int(word["top"]))
     matching_row["bottom"] = max(int(matching_row["bottom"]), int(word["bottom"]))
     matching_row["center"] = sum(float(item["center"]) for item in words) / len(words)
+
+
+_TSV_HEADER = (
+    "level",
+    "page_num",
+    "block_num",
+    "par_num",
+    "line_num",
+    "word_num",
+    "left",
+    "top",
+    "width",
+    "height",
+    "conf",
+    "text",
+)
+
+
+def _parse_tsv(output: str, image_shape: tuple[int, int]) -> tuple[list[dict[str, object]], int]:
+    # Tesseract emits literal tab-separated text, not CSV-escaped fields.
+    # Split physical lines so an unmatched quote cannot consume later records.
+    records = output.split("\n")
+    if tuple(records[0].rstrip("\r").split("\t")) != _TSV_HEADER:
+        raise OSError("Malformed Tesseract TSV header")
+    image_height, image_width = image_shape
+    words: list[dict[str, object]] = []
+    malformed = 0
+    for record in records[1:]:
+        if not record.strip():
+            continue
+        fields = record.rstrip("\r").split("\t")
+        try:
+            if len(fields) != len(_TSV_HEADER):
+                raise ValueError
+            level, page, block, paragraph, line, number, left, top, width, height = (
+                int(field) for field in fields[:10]
+            )
+            confidence = float(fields[10])
+            if (
+                level not in range(1, 6)
+                or page < 1
+                or min(block, paragraph, line, number, left, top) < 0
+                or min(width, height) <= 0
+                or left + width > image_width
+                or top + height > image_height
+                or not math.isfinite(confidence)
+            ):
+                raise ValueError
+            if level != 5:
+                if fields[11].strip() or confidence != -1:
+                    raise ValueError
+                continue
+            if not 0 <= confidence <= 100:
+                raise ValueError
+        except ValueError:
+            malformed += 1
+            continue
+        text = fields[11].strip()
+        if text:
+            words.append(
+                {
+                    "text": text,
+                    "confidence": confidence,
+                    "left": left,
+                    "top": top,
+                    "bottom": top + height,
+                    "center": top + height / 2.0,
+                }
+            )
+    return words, malformed
+
+
+def _same_row(first: dict[str, object], second: dict[str, object]) -> bool:
+    first_height = int(first["bottom"]) - int(first["top"])
+    second_height = int(second["bottom"]) - int(second["top"])
+    min_height = min(first_height, second_height)
+    max_height = max(first_height, second_height)
+    overlap = min(int(first["bottom"]), int(second["bottom"])) - max(
+        int(first["top"]), int(second["top"])
+    )
+    center_distance = abs(float(first["center"]) - float(second["center"]))
+    return (
+        max_height <= 2.5 * min_height
+        and overlap >= 0.35 * min_height
+        and center_distance <= 0.65 * min_height
+    )
