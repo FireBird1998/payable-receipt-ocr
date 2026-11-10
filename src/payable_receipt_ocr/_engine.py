@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+from ._contracts import PreparedVariant, SourceImage
+from ._geometry import region_tolerance
 from ._image import load_source_image, prepare_variants
 from ._interpretation import interpret
 from ._ocr import build_schedule, execute_schedule
@@ -144,8 +146,34 @@ def process_receipt(
         "warnings": unique_warnings,
     }
     if diagnostics and interpretation.diagnostics is not None:
-        payload["diagnostics"] = interpretation.diagnostics
+        payload["diagnostics"] = {
+            **interpretation.diagnostics,
+            "coordinates": _coordinate_diagnostics(source, variants),
+        }
     return payload
+
+
+def _coordinate_diagnostics(
+    source: SourceImage, variants: tuple[PreparedVariant, ...]
+) -> dict[str, Any]:
+    """Describe the frame used by every ``source_region`` (see ADR-0011)."""
+
+    return {
+        "frame": "source",
+        "units": "pixels",
+        "origin": "top-left corner of the EXIF-oriented source image",
+        "convention": "continuous pixel-corner coordinates; right and bottom are exclusive",
+        "polygon_order": ["top-left", "top-right", "bottom-right", "bottom-left"],
+        "clipping": "bounds are clipped to the source; polygons are not",
+        "source_dimensions": [source.width, source.height],
+        "stored_dimensions": list(source.stored_dimensions),
+        "exif_orientation": source.exif_orientation,
+        "stored_from_source": source.orientation.to_dict(),
+        "tolerance_pixels": round(
+            max(region_tolerance(variant.transform) for variant in variants), 3
+        ),
+        "variants": {variant.name: variant.transform.to_dict() for variant in variants},
+    }
 
 
 def _dedupe_warnings(warnings: list[dict[str, str]]) -> list[dict[str, str]]:

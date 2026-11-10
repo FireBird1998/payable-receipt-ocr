@@ -6,6 +6,8 @@ from typing import Any, Literal, Optional
 
 import numpy as np
 
+from ._geometry import CoordinateTransform, SourceRegion
+
 EvidenceGrade = Literal["strong", "review", "none"]
 LabelKind = Literal["payment", "fallback"]
 
@@ -39,12 +41,36 @@ class SourceImage:
     width: int
     height: int
     bgr: np.ndarray
+    # Pixel dimensions as stored in the file, before EXIF orientation is applied.
+    stored_dimensions: tuple[int, int]
+    exif_orientation: int
+    # Maps stored pixels to the oriented frame reported as ``source.dimensions``.
+    orientation: CoordinateTransform
 
 
 @dataclass(frozen=True)
 class PreparedVariant:
     name: str
     image: np.ndarray
+    # Maps oriented source pixels to this variant's processed pixels.
+    transform: CoordinateTransform
+
+
+@dataclass(frozen=True)
+class OcrWord:
+    """One recognized word with its box in processed-image pixels.
+
+    ``score`` is the engine's own recognition score (Tesseract: word confidence on a
+    0-100 scale). ``None`` means the engine reported no score, which differs from zero.
+    It is never an evidence grade.
+    """
+
+    text: str
+    left: int
+    top: int
+    right: int
+    bottom: int
+    score: Optional[float]
 
 
 @dataclass(frozen=True)
@@ -53,6 +79,9 @@ class OcrLine:
     confidence: float
     top: int
     bottom: int
+    left: int = 0
+    right: int = 0
+    words: tuple[OcrWord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -64,6 +93,24 @@ class OcrPassResult:
     average_confidence: float
     lines: tuple[OcrLine, ...]
     malformed_records: int = 0
+    engine: str = "tesseract"
+    score_scale: str = "tesseract-word-confidence-0-100"
+    # Maps oriented source pixels to the processed pixels this pass read.
+    transform: Optional[CoordinateTransform] = None
+
+    @property
+    def script(self) -> str:
+        return _SCRIPTS.get(self.language, self.language)
+
+    def source_region(
+        self, left: float, top: float, right: float, bottom: float
+    ) -> Optional[SourceRegion]:
+        if self.transform is None:
+            return None
+        return self.transform.region_to_source(left, top, right, bottom)
+
+
+_SCRIPTS = {"eng": "Latin", "Devanagari": "Devanagari"}
 
 
 @dataclass(frozen=True)
@@ -97,6 +144,10 @@ class Candidate:
     psm: int
     score: float
     reasons: tuple[str, ...]
+    # Evidence location in source pixels: the amount's own words when they can be
+    # identified ("amount"), otherwise the whole OCR line ("line").
+    source_region: Optional[SourceRegion] = None
+    region_basis: Optional[str] = None
 
 
 @dataclass(frozen=True)
