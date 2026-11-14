@@ -11,7 +11,8 @@ from typing import Optional
 
 import cv2
 
-from ._contracts import OcrLine, OcrPassResult, OcrWarning, PreparedVariant
+from ._contracts import OcrLine, OcrPassResult, OcrWarning, OcrWord, PreparedVariant
+from ._geometry import CoordinateTransform
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,7 @@ def execute_schedule(
         try:
             ocr_pass = _run_pass(
                 image=variants[current.variant].image,
+                transform=variants[current.variant].transform,
                 language=current.language,
                 psm=current.psm,
                 pass_id=current.pass_id,
@@ -146,6 +148,7 @@ def _run_pass(
     language: str,
     psm: int,
     pass_id: str,
+    transform: Optional[CoordinateTransform] = None,
     variant: str,
     tessdata_dir: str,
     timeout_seconds: float,
@@ -211,6 +214,19 @@ def _run_pass(
                 confidence=round(sum(line_confidences) / len(line_confidences), 2),
                 top=int(row["top"]),
                 bottom=int(row["bottom"]),
+                left=min(int(item["left"]) for item in row_words),
+                right=max(int(item["right"]) for item in row_words),
+                words=tuple(
+                    OcrWord(
+                        text=str(item["text"]),
+                        left=int(item["left"]),
+                        top=int(item["top"]),
+                        right=int(item["right"]),
+                        bottom=int(item["bottom"]),
+                        score=float(item["confidence"]),
+                    )
+                    for item in row_words
+                ),
             )
         )
     average = round(sum(confidences) / len(confidences), 2) if confidences else 0.0
@@ -222,6 +238,7 @@ def _run_pass(
         average_confidence=average,
         lines=tuple(lines),
         malformed_records=malformed_records,
+        transform=transform,
     )
 
 
@@ -316,6 +333,7 @@ def _parse_tsv(output: str, image_shape: tuple[int, int]) -> tuple[list[dict[str
                     "text": text,
                     "confidence": confidence,
                     "left": left,
+                    "right": left + width,
                     "top": top,
                     "bottom": top + height,
                     "center": top + height / 2.0,

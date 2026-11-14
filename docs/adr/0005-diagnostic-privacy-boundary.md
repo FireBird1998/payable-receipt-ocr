@@ -19,6 +19,8 @@ When enabled, the `diagnostics` key includes:
 - `ocr.passes[].lines` — individual line records with text, confidence, and bounding-box coordinates
 - `candidates` — all monetary candidates extracted and their scores
 - `candidate_groups` — aggregated candidate groups with cross-pass support detail
+- `coordinates` and `source_region` records — word, line and candidate locations in source-image
+  pixels, with per-variant preprocessing transforms (ADR-0011)
 
 This data can contain personal information visible on the receipt: names, addresses, item
 descriptions, amounts, merchant text.

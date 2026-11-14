@@ -13,7 +13,9 @@ from ._contracts import (
     OcrLine,
     OcrPassResult,
     OcrWarning,
+    OcrWord,
 )
+from ._geometry import SourceRegion
 
 CURRENCY_PATTERN = r"(?:₹|Rs\.?|INR|\$|USD|€|EUR|£|GBP)"
 NUMBER_PATTERN = r"(?:\d{1,2}(?:,\d{2})+(?:,\d{3})?|\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?"
@@ -137,15 +139,10 @@ def interpret(
                         "psm": ocr_pass.psm,
                         "average_confidence": ocr_pass.average_confidence,
                         "raw_text": "\n".join(line.text for line in ocr_pass.lines),
-                        "lines": [
-                            {
-                                "text": line.text,
-                                "confidence": line.confidence,
-                                "top": line.top,
-                                "bottom": line.bottom,
-                            }
-                            for line in ocr_pass.lines
-                        ],
+                        "engine": ocr_pass.engine,
+                        "script": ocr_pass.script,
+                        "score_scale": ocr_pass.score_scale,
+                        "lines": [_line_diagnostics(ocr_pass, line) for line in ocr_pass.lines],
                     }
                     for ocr_pass in passes
                 ]
@@ -160,6 +157,10 @@ def interpret(
                     "score": candidate.score,
                     "reasons": list(candidate.reasons),
                     "pass_id": candidate.pass_id,
+                    "line_index": candidate.line_index,
+                    "ocr_score": candidate.ocr_confidence,
+                    "region_basis": candidate.region_basis,
+                    "source_region": _region_dict(candidate.source_region),
                 }
                 for candidate in candidates
             ],
@@ -335,6 +336,7 @@ def _candidates_for_pass(
         searchable = _normalized_search_text(line.text)
         label_kind, label, component_role, label_points = _classify_line(searchable)
         matches = list(MONEY_PATTERN.finditer(searchable))
+        spans = _word_spans(line, searchable)
         for match_index, match in enumerate(matches):
             explicit_currency = _currency_from_marker(
                 match.group("prefix")
@@ -359,6 +361,7 @@ def _candidates_for_pass(
                 if explicit_currency == "INR":
                     score += 5
             currency = explicit_currency or fallback_currency or currency_context
+            source_region, region_basis = _evidence_region(ocr_pass, line, spans, match)
             found.append(
                 Candidate(
                     amount=_format_decimal(_parse_amount(amount_token)),
@@ -377,10 +380,97 @@ def _candidates_for_pass(
                     psm=ocr_pass.psm,
                     score=round(score, 2),
                     reasons=tuple(reasons),
+                    source_region=source_region,
+                    region_basis=region_basis,
                 )
             )
     found.sort(key=lambda candidate: candidate.score, reverse=True)
     return tuple(found)
+
+
+def _word_spans(line: OcrLine, searchable: str) -> Optional[list[tuple[int, int, OcrWord]]]:
+    """Locate each word in the normalized line text, or None when they do not align."""
+
+    spans: list[tuple[int, int, OcrWord]] = []
+    pieces: list[str] = []
+    offset = 0
+    for word in line.words:
+        normalized = _normalized_search_text(word.text)
+        if not normalized:
+            continue
+        if pieces:
+            offset += 1
+        spans.append((offset, offset + len(normalized), word))
+        pieces.append(normalized)
+        offset += len(normalized)
+    if not spans or " ".join(pieces) != searchable:
+        return None
+    return spans
+
+
+def _evidence_region(
+    ocr_pass: OcrPassResult,
+    line: OcrLine,
+    spans: Optional[list[tuple[int, int, OcrWord]]],
+    match: re.Match[str],
+) -> tuple[Optional[SourceRegion], Optional[str]]:
+    text = match.group(0)
+    start = match.start() + (len(text) - len(text.lstrip()))
+    end = match.start() + len(text.rstrip())
+    covered = [word for first, last, word in spans or () if first < end and last > start]
+    if covered:
+        region = ocr_pass.source_region(
+            min(word.left for word in covered),
+            min(word.top for word in covered),
+            max(word.right for word in covered),
+            max(word.bottom for word in covered),
+        )
+        if region is not None:
+            return region, "amount"
+    if line.words:
+        region = ocr_pass.source_region(line.left, line.top, line.right, line.bottom)
+        if region is not None:
+            return region, "line"
+    return None, None
+
+
+def _region_dict(region: Optional[SourceRegion]) -> Optional[dict[str, object]]:
+    return region.to_dict() if region is not None else None
+
+
+def _line_diagnostics(ocr_pass: OcrPassResult, line: OcrLine) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "text": line.text,
+        "confidence": line.confidence,
+        "top": line.top,
+        "bottom": line.bottom,
+    }
+    if not line.words:
+        return payload
+    payload.update(
+        {
+            "left": line.left,
+            "right": line.right,
+            "source_region": _region_dict(
+                ocr_pass.source_region(line.left, line.top, line.right, line.bottom)
+            ),
+            "words": [
+                {
+                    "text": word.text,
+                    "left": word.left,
+                    "top": word.top,
+                    "right": word.right,
+                    "bottom": word.bottom,
+                    "ocr_score": word.score,
+                    "source_region": _region_dict(
+                        ocr_pass.source_region(word.left, word.top, word.right, word.bottom)
+                    ),
+                }
+                for word in line.words
+            ],
+        }
+    )
+    return payload
 
 
 def _arithmetic_matches(candidates: tuple[Candidate, ...]) -> dict[str, tuple[str, ...]]:
